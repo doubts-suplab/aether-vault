@@ -1,0 +1,35 @@
+services:
+  postgres-vault:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: aether_vault
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether -d aether_vault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-vault-data:/var/lib/postgresql/data
+
+  aether-vault:
+    build:
+      context: ../..
+      dockerfile: vault-api/Dockerfile
+    ports:
+      - "8084:8084"
+    environment:
+      POSTGRES_URL: jdbc:postgresql://postgres-vault:5432/aether_vault
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      SPRING_PROFILES_ACTIVE: local
+    depends_on:
+      postgres-vault:
+        condition: service_healthy
+
+volumes:
+  postgres-vault-data:

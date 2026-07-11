@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: aether-vault
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/aether_vault}
+    username: ${POSTGRES_USER:aether}
+    password: ${POSTGRES_PASSWORD:aether}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8084}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+aether:
+  vault:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+    embedding:
+      enabled: ${EMBEDDING_ENABLED:true}
+      model: ${EMBEDDING_MODEL:all-minilm}
+    ingestion:
+      chunk-size: ${VAULT_CHUNK_SIZE:1000}
+      chunk-overlap: ${VAULT_CHUNK_OVERLAP:150}
+    freshness:
+      enabled: ${VAULT_FRESHNESS_ENABLED:true}
+      reindex-interval-days: ${VAULT_REINDEX_INTERVAL_DAYS:30}
+      cron: ${VAULT_FRESHNESS_CRON:0 0 4 * * *}

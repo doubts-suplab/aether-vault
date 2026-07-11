@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aether-vault
+  namespace: aether-vault
+  labels:
+    app: aether-vault
+    app.kubernetes.io/name: aether-vault
+    app.kubernetes.io/part-of: aether
+spec:
+  type: ClusterIP
+  selector:
+    app: aether-vault
+  ports:
+    - name: http
+      port: 8084
+      targetPort: 8084
+      protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aether-vault
+  namespace: aether-vault
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aether-vault
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aether-vault
+  namespace: aether-vault
+  labels:
+    app.kubernetes.io/name: aether-vault
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aether-vault-config
+  namespace: aether-vault
+data:
+  ollama-base-url: "http://ollama:11434"
+  embedding-enabled: "true"
+  embedding-model: "all-minilm"
+  vault-chunk-size: "1000"
+  vault-chunk-overlap: "150"
+  vault-freshness-enabled: "true"
+  vault-reindex-interval-days: "30"
+---
+# Template only — never commit actual values
+# kubectl create secret generic aether-vault-secrets \
+#   --from-literal=postgres-url=jdbc:postgresql://... \
+#   --from-literal=postgres-user=aether \
+#   --from-literal=postgres-password=<secret>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aether-vault-secrets
+  namespace: aether-vault
+type: Opaque
+data: {}  # Populated externally — never in source control
