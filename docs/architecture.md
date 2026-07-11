@@ -81,6 +81,8 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 
 All embeddings are 384-dim (all-MiniLM-L6-v2), consistent across the ecosystem.
 
+The knowledge graph is persisted as relational adjacency tables rather than a native graph DB, keeping Vault single-store on PostgreSQL like the rest of the ecosystem. This is sufficient for the current shallow (1-hop, mention-ordered) traversals; a move to Apache AGE or a native graph DB is gated on future multi-hop / graph-algorithm needs — see ADR-0008 in `.claude/memory/decisions.md`.
+
 ---
 
 ## 5. Key Flows

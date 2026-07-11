@@ -30,3 +30,12 @@
 ## ADR-0007 — Char-based chunking now, tokenizer later (Phase 0)
 - **Decision:** Ingest uses a deterministic character-window `TextChunker` with overlap and a `chars/4` token estimate.
 - **Rationale:** Deterministic, dependency-free, and unit-testable for the scaffold. A model-accurate tokenizer is a Phase 1 concern and slots in behind the same interface.
+
+## ADR-0008 — Knowledge graph on relational adjacency tables, not a native graph DB (Phase 0)
+- **Decision:** Persist the knowledge graph as relational adjacency tables (`knowledge_entities`, `entity_relations`) in PostgreSQL behind the `KnowledgeGraphStore` port — no native graph database (Neo4j, etc.).
+- **Rationale:**
+  - **Ecosystem consistency:** every Aether runtime repo (Core, Grid, Memory) is single-store on PostgreSQL 16 + pgvector; no graph DB exists anywhere in the ecosystem. Adding one would fragment the standardised stack, break Vault's "boots standalone on its own Postgres schema" guarantee, and add a second stateful service to operate, back up, and secure.
+  - **Sufficiency:** the Phase-0 graph is manual-write and its queries are shallow — entity upsert and 1-hop neighbour traversal ordered by mention count. Adjacency tables serve this cheaply; deeper traversal is available today via recursive CTEs.
+  - The port abstraction (`KnowledgeGraphStore`) means the backing store can change later without touching callers.
+- **Revisit trigger:** re-evaluate when the graph needs **low-latency variable-length multi-hop traversal, path-finding, or graph algorithms** (PageRank, community detection) over high-degree nodes — realistic once Phase-2 automatic entity/relation extraction produces a dense graph.
+- **Migration ladder (single-store first):** recursive-CTE traversal in PostgreSQL → **Apache AGE** (openCypher inside PostgreSQL, keeps the single-store guarantee) → a dedicated native graph DB only if AGE cannot meet traversal-depth/latency targets. Any move past step 1 requires its own ADR.

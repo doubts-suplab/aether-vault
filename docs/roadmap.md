@@ -53,6 +53,7 @@
 | Relation extraction between co-occurring entities | ⏳ |
 | Graph-augmented retrieval (entity-aware RAG) | ⏳ |
 | Entity resolution / de-duplication | ⏳ |
+| Graph-store evaluation — recursive CTE → Apache AGE → native graph DB, gated on traversal depth/latency once extraction produces a dense graph (see ADR-0008) | ⏳ |
 
 ---
 
