@@ -35,6 +35,20 @@ public interface KnowledgeDocumentStore {
     Optional<KnowledgeDocument> findById(KnowledgeScope scope, UUID documentId);
 
     /**
+     * Looks up a document by its source URI within a scope.
+     *
+     * <p>The connector-driven ingest path uses this to give one {@code sourceUri} a single stable
+     * document: re-fetching a source finds its existing record so an unchanged source can be skipped
+     * and a changed one re-indexed in place rather than duplicated. A source URI is unique within a
+     * collection; the most recently updated match is returned defensively.</p>
+     *
+     * @param scope     the owning tenant + collection
+     * @param sourceUri the source URI to look up
+     * @return the document if one exists for this source in this scope, otherwise empty
+     */
+    Optional<KnowledgeDocument> findBySourceUri(KnowledgeScope scope, String sourceUri);
+
+    /**
      * Lists documents in a collection, most recently updated first.
      *
      * @param scope the owning tenant + collection

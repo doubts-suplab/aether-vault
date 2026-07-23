@@ -88,6 +88,28 @@ public record KnowledgeDocument(
     }
 
     /**
+     * Returns a {@code PENDING} copy re-registered from a freshly fetched source: same identity
+     * ({@code id}, {@code scope}, {@code sourceUri}, {@code createdAt}) but a new {@code checksum},
+     * refreshed {@code title}/{@code contentType}, {@code chunkCount} reset to 0, and {@code updatedAt}
+     * set to now.
+     *
+     * <p>This is how a source connector re-indexes a changed source without minting a new document —
+     * one {@code sourceUri} keeps one stable document across re-ingestions. The prior chunks are
+     * replaced by the ingest pipeline, not here.</p>
+     *
+     * @param newChecksum    the checksum of the newly fetched content (must be present)
+     * @param newTitle       the title from the newly fetched content
+     * @param newContentType the content type from the newly fetched content
+     * @return a PENDING copy ready to be re-indexed
+     */
+    public KnowledgeDocument reregister(String newChecksum, String newTitle, String newContentType) {
+        if (newChecksum == null || newChecksum.isBlank())
+            throw new IllegalArgumentException("newChecksum required");
+        return new KnowledgeDocument(id, tenantId, collectionId, sourceUri, newTitle, newContentType,
+                newChecksum, DocumentStatus.PENDING, 0, createdAt, indexedAt, Instant.now());
+    }
+
+    /**
      * Returns a copy marked {@code STALE} — the source has drifted or the re-index interval has
      * elapsed. Existing chunks stay searchable until re-indexing replaces them.
      */

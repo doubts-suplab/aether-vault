@@ -62,6 +62,11 @@ class DefaultDocumentIngestionServiceTest {
         }
 
         @Override
+        public Optional<KnowledgeDocument> findBySourceUri(KnowledgeScope scope, String sourceUri) {
+            return Optional.empty();
+        }
+
+        @Override
         public List<KnowledgeDocument> findByCollection(KnowledgeScope scope, int limit) {
             return List.of();
         }

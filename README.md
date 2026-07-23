@@ -30,7 +30,8 @@ cd ../.. && mvn spring-boot:run -pl vault-api
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents` | Ingest a document (chunk + embed + index) |
+| `POST` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents` | Ingest a document from inline text (chunk + embed + index) |
+| `POST` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents/from-source` | Ingest from a source URI via a connector (freshness-aware) |
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents` | List documents in a collection |
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents/count` | Document + chunk counts |
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents/{id}` | Fetch a document |
@@ -57,6 +58,15 @@ A **collection** (`tenantId` + `collectionId`) is a corpus of documents. Ingesti
 ### RAG Pipeline
 
 `POST /api/v1/rag/query` embeds the query, runs cosine-distance vector search **within the requested collection only**, and returns the nearest chunks together with an assembled context string bounded to `RagContext.MAX_CONTEXT_CHARS`. `topK` is clamped to `DefaultRagPipelineService.MAX_TOP_K`. Vault performs the *retrieval* half of RAG; the calling agent performs generation.
+
+### Source Connectors
+
+Documents can be ingested from inline text *or* pulled from a source URI. `POST …/documents/from-source` with `{"sourceUri": "…"}` resolves a **connector** by scheme through a **default-deny registry** — a URI no enabled connector supports is rejected (`400`), never fetched. Two connectors ship:
+
+- **Filesystem** (`file:`) — confined to a configured **allowed root**; path-traversal and absolute-path escapes are rejected before any read. Off unless enabled with an explicit root.
+- **HTTP(S)** (`http:` / `https:`) — fetched with a request timeout and a response-size cap; non-2xx is an error. On by default.
+
+Source ingestion is **freshness-aware**: re-pointing at the same `sourceUri` checksums the fetched content and reports an `outcome` — `UNCHANGED` (identical content, *not* re-embedded), `INDEXED` (new or changed, re-indexed under the **same document ID**), or `FAILED`. One source URI maps to one stable document across re-ingestions.
 
 ### Knowledge Freshness
 
@@ -89,6 +99,13 @@ Aether Vault owns the **Knowledge** capability exclusively. Personal memory stay
 | `EMBEDDING_MODEL` | `all-minilm` | Embedding model name |
 | `VAULT_CHUNK_SIZE` | `1000` | Characters per chunk |
 | `VAULT_CHUNK_OVERLAP` | `150` | Overlap characters between adjacent chunks |
+| `VAULT_SOURCE_ENABLED` | `true` | Toggle the connector-driven `/from-source` ingest path |
+| `VAULT_SOURCE_HTTP_ENABLED` | `true` | Enable the HTTP(S) source connector |
+| `VAULT_SOURCE_HTTP_TIMEOUT_SECONDS` | `15` | HTTP fetch request timeout |
+| `VAULT_SOURCE_HTTP_MAX_BYTES` | `8388608` | Max HTTP response body size (8 MiB) |
+| `VAULT_SOURCE_FS_ENABLED` | `false` | Enable the filesystem source connector (requires an allowed root) |
+| `VAULT_SOURCE_FS_ALLOWED_ROOT` | _(unset)_ | Absolute directory tree `file:` sources are confined to |
+| `VAULT_SOURCE_FS_MAX_BYTES` | `8388608` | Max file size for `file:` sources (8 MiB) |
 | `VAULT_FRESHNESS_ENABLED` | `true` | Toggle the scheduled freshness sweep |
 | `VAULT_REINDEX_INTERVAL_DAYS` | `30` | Age beyond which an indexed document is flagged stale |
 | `VAULT_FRESHNESS_CRON` | `0 0 4 * * *` | Freshness sweep schedule |

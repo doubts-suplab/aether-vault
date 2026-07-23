@@ -1,10 +1,13 @@
 package com.suplab.aether.vault.api.controller;
 
+import com.suplab.aether.vault.domain.ContentChecksum;
 import com.suplab.aether.vault.domain.KnowledgeDocument;
 import com.suplab.aether.vault.domain.KnowledgeScope;
+import com.suplab.aether.vault.domain.SourceFetchException;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.DocumentIngestionPort;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
+import com.suplab.aether.vault.ports.SourceIngestionPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -18,11 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -42,13 +42,16 @@ public class KnowledgeDocumentController {
     private final DocumentIngestionPort ingestionPort;
     private final KnowledgeDocumentStore documentStore;
     private final DocumentChunkStore chunkStore;
+    private final Optional<SourceIngestionPort> sourceIngestionPort;
 
     public KnowledgeDocumentController(DocumentIngestionPort ingestionPort,
                                        KnowledgeDocumentStore documentStore,
-                                       DocumentChunkStore chunkStore) {
+                                       DocumentChunkStore chunkStore,
+                                       Optional<SourceIngestionPort> sourceIngestionPort) {
         this.ingestionPort = ingestionPort;
         this.documentStore = documentStore;
         this.chunkStore = chunkStore;
+        this.sourceIngestionPort = sourceIngestionPort;
     }
 
     /**
@@ -78,7 +81,7 @@ public class KnowledgeDocumentController {
         var contentType = body.getOrDefault("contentType", "text/plain");
 
         var scope = new KnowledgeScope(tenantId, collectionId);
-        var document = KnowledgeDocument.create(scope, sourceUri, title, contentType, checksum(text));
+        var document = KnowledgeDocument.create(scope, sourceUri, title, contentType, ContentChecksum.sha256(text));
         documentStore.save(document);
         var result = ingestionPort.ingest(document, text);
 
@@ -88,6 +91,51 @@ public class KnowledgeDocumentController {
                 "documentId", result.documentId().toString(),
                 "chunkCount", result.chunkCount(),
                 "status", result.status().name()));
+    }
+
+    /**
+     * Ingests a document from a source URI via a registered connector, rather than from inline text.
+     *
+     * <p>Request body: {@code {"sourceUri": "file:notes/handbook.md"}} or
+     * {@code {"sourceUri": "https://example.com/policy.txt"}}. The connector registry is
+     * default-deny — a URI no enabled connector supports is rejected. Re-posting the same
+     * {@code sourceUri} is freshness-aware: an unchanged source is not re-embedded, a changed one is
+     * re-indexed in place under the same document ID.</p>
+     *
+     * @return 201 with {@code documentId}, {@code chunkCount}, {@code status}, {@code outcome}
+     *         (INDEXED / UNCHANGED / FAILED); 400 on a bad or unsupported source; 503 when no
+     *         source connector is enabled
+     */
+    @PostMapping("/from-source")
+    public ResponseEntity<Map<String, Object>> ingestFromSource(
+            @PathVariable String tenantId,
+            @PathVariable String collectionId,
+            @RequestBody Map<String, String> body) {
+
+        if (sourceIngestionPort.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "no source connector is enabled"));
+        }
+        var sourceUri = body.get("sourceUri");
+        if (sourceUri == null || sourceUri.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "sourceUri is required"));
+        }
+
+        var scope = new KnowledgeScope(tenantId, collectionId);
+        try {
+            var result = sourceIngestionPort.get().ingestFromSource(scope, sourceUri);
+            log.info("Ingested from source tenantId={} collectionId={} sourceUri={} documentId={} outcome={}",
+                    tenantId, collectionId, sourceUri, result.documentId(), result.outcome());
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                    "documentId", result.documentId().toString(),
+                    "chunkCount", result.chunkCount(),
+                    "status", result.status().name(),
+                    "outcome", result.outcome().name()));
+        } catch (SourceFetchException e) {
+            log.warn("Source fetch failed tenantId={} collectionId={} sourceUri={} reason={}",
+                    tenantId, collectionId, sourceUri, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     /**
@@ -167,20 +215,5 @@ public class KnowledgeDocumentController {
         view.put("indexedAt", document.indexedAt() != null ? document.indexedAt().toString() : null);
         view.put("updatedAt", document.updatedAt().toString());
         return view;
-    }
-
-    /**
-     * Computes a SHA-256 hex checksum of the source text — the basis for freshness / change
-     * detection. A re-ingested source with different content yields a different checksum.
-     */
-    private static String checksum(String text) {
-        try {
-            var digest = MessageDigest.getInstance("SHA-256");
-            var hash = digest.digest(text.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            // SHA-256 is guaranteed present on every JVM; this is unreachable.
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
     }
 }

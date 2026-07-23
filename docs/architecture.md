@@ -45,8 +45,11 @@ KnowledgeDocument
   ├── markIndexed(chunkCount) → status INDEXED, chunkCount, indexedAt        (after ingest)
   ├── markStale()             → status STALE                                (freshness sweep)
   ├── markFailed()            → status FAILED                               (no usable chunks)
+  ├── reregister(checksum, title, contentType) → PENDING copy, same identity (changed-source re-index)
   └── isStale(checksum)        → content drift detection
 
+FetchedContent   = (sourceUri, title, contentType, rawText)   — raw content a connector pulls
+ContentChecksum  = sha256(text)   — shared freshness fingerprint (inline text + source connectors)
 DocumentChunk    = (id, documentId, tenantId, collectionId, ordinal, content, tokenCount)
 KnowledgeScope   = (tenantId, collectionId)   — the ownership + isolation key
 RetrievalQuery   = (tenantId, collectionId, queryText, topK)
@@ -65,8 +68,14 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `DocumentChunkStore` | `PGVectorDocumentChunkStore` | Persist chunks + embeddings; cosine vector search |
 | `KnowledgeGraphStore` | `JdbcKnowledgeGraphStore` | Entities (upsert + mention) and relations; neighbour traversal |
 | `DocumentIngestionPort` | `DefaultDocumentIngestionService` | Chunk + embed + index a document (idempotent) |
+| `DocumentSourceConnector` | `FilesystemSourceConnector`, `HttpSourceConnector` | Fetch raw content from a source URI (one scheme each); trust boundary |
+| `SourceIngestionPort` | `DefaultSourceIngestionService` | Fetch → checksum → skip-if-unchanged → (re-)index from a source URI |
 | `RagPipelinePort` | `DefaultRagPipelineService` | Embed query → vector search → bounded context |
 | `KnowledgeFreshnessPort` | `DocumentFreshnessService` | Set-based re-index staleness sweep |
+
+Connector selection goes through `SourceConnectorRegistry` — **default-deny**: a URI no registered
+connector supports is never fetched. Each connector enforces its own safety limits (the filesystem
+connector is confined to a configured allowed root; the HTTP connector caps body size and timeout).
 
 ---
 
@@ -78,6 +87,7 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `V002` | `document_chunks` | Ordered chunks; `document_id` FK `ON DELETE CASCADE`; unique `(document_id, ordinal)` |
 | `V003` | `document_chunks.embedding vector(384)` | IVFFlat cosine index (`lists=100`) |
 | `V004` | `knowledge_entities`, `entity_relations` | Graph node/edge tables; entity unique on `(tenant_id, collection_id, name, entity_type)`; relations keyed on `(source, target, relation_type)` |
+| `V005` | index `idx_knowledge_documents_source_uri` | `(tenant_id, collection_id, source_uri)` — backs `findBySourceUri` for freshness-aware source re-ingestion |
 
 All embeddings are 384-dim (all-MiniLM-L6-v2), consistent across the ecosystem.
 
@@ -90,6 +100,12 @@ The knowledge graph is persisted as relational adjacency tables rather than a na
 ### 5.1 Ingest (document indexing)
 1. `POST …/collections/{collectionId}/documents` → compute SHA-256 `checksum`, register `KnowledgeDocument` (PENDING).
 2. `DocumentIngestionPort.ingest` deletes any prior chunks, splits text with `TextChunker` (size/overlap configurable), embeds each chunk via Ollama, saves chunks, and marks the document `INDEXED` (or `FAILED` when no chunks are produced). Re-posting the same document re-indexes it in place.
+
+### 5.1.1 Ingest from a source (connector-driven)
+1. `POST …/collections/{collectionId}/documents/from-source` with `{"sourceUri": "…"}`.
+2. `SourceConnectorRegistry` resolves a `DocumentSourceConnector` by scheme (default-deny — unknown schemes are rejected `400`); the connector fetches the content into a `FetchedContent`.
+3. `DefaultSourceIngestionService` checksums the content and looks up any existing document for that `sourceUri`: an already-`INDEXED` document with a matching checksum is **UNCHANGED** (skipped, not re-embedded); a new source is registered; a changed source is re-registered under the **same document ID** (`reregister`) and re-indexed via `DocumentIngestionPort`.
+4. Response reports `outcome` = `INDEXED | UNCHANGED | FAILED`. Connectors are off unless enabled (HTTP on by default; the filesystem connector requires an explicit allowed root).
 
 ### 5.2 RAG retrieval
 1. `POST /api/v1/rag/query` → `DefaultRagPipelineService` clamps `topK`, embeds `queryText`.
