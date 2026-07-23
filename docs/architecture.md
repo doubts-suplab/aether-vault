@@ -68,14 +68,22 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `DocumentChunkStore` | `PGVectorDocumentChunkStore` | Persist chunks + embeddings; cosine vector search |
 | `KnowledgeGraphStore` | `JdbcKnowledgeGraphStore` | Entities (upsert + mention) and relations; neighbour traversal |
 | `DocumentIngestionPort` | `DefaultDocumentIngestionService` | Chunk + embed + index a document (idempotent) |
-| `DocumentSourceConnector` | `FilesystemSourceConnector`, `HttpSourceConnector` | Fetch raw content from a source URI (one scheme each); trust boundary |
+| `DocumentSourceConnector` | `FilesystemSourceConnector`, `HttpSourceConnector`, `S3SourceConnector` | Fetch raw content from a source URI (one scheme each); trust boundary |
 | `SourceIngestionPort` | `DefaultSourceIngestionService` | Fetch → checksum → skip-if-unchanged → (re-)index from a source URI |
+| `TokenCounter` | `JtokkitTokenCounter` (default), `HeuristicTokenCounter` | Count chunk tokens for context budgeting; tokenizer is replaceable |
 | `RagPipelinePort` | `DefaultRagPipelineService` | Embed query → vector search → bounded context |
 | `KnowledgeFreshnessPort` | `DocumentFreshnessService` | Set-based re-index staleness sweep |
 
 Connector selection goes through `SourceConnectorRegistry` — **default-deny**: a URI no registered
 connector supports is never fetched. Each connector enforces its own safety limits (the filesystem
-connector is confined to a configured allowed root; the HTTP connector caps body size and timeout).
+connector is confined to a configured allowed root; the HTTP connector caps body size and timeout; the
+S3 connector uses an injected AWS SDK v2 client with credentials from the standard provider chain — no
+hardcoded secrets — and its own size cap). Connectors are opt-in: HTTP is on by default, filesystem and
+S3 are off until explicitly enabled.
+
+Chunk token counts come from a pluggable `TokenCounter` (default `JtokkitTokenCounter`, a real BPE
+tokenizer) rather than a `chars / 4` estimate — the tokenizer is replaceable through the port, so the
+exact downstream-model tokenizer can be swapped in without touching ingestion or RAG.
 
 ---
 

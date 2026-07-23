@@ -5,6 +5,7 @@ import com.suplab.aether.vault.domain.DocumentStatus;
 import com.suplab.aether.vault.domain.KnowledgeDocument;
 import com.suplab.aether.vault.domain.KnowledgeScope;
 import com.suplab.aether.vault.domain.RetrievedChunk;
+import com.suplab.aether.vault.engine.tokenizer.HeuristicTokenCounter;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
 import org.junit.jupiter.api.Test;
@@ -86,7 +87,7 @@ class DefaultDocumentIngestionServiceTest {
         var chunkStore = new CapturingChunkStore();
         var docStore = new CapturingDocumentStore();
         var service = new DefaultDocumentIngestionService(docStore, chunkStore, Optional.empty(),
-                new TextChunker(10, 0));
+                new TextChunker(10, 0), new HeuristicTokenCounter());
         var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
 
         var result = service.ingest(doc, "abcdefghijklmnopqrst"); // 20 chars → 2 chunks
@@ -103,7 +104,7 @@ class DefaultDocumentIngestionServiceTest {
     void ingest_deletesPriorChunksFirst() {
         var chunkStore = new CapturingChunkStore();
         var service = new DefaultDocumentIngestionService(new CapturingDocumentStore(), chunkStore,
-                Optional.empty(), new TextChunker(1000, 0));
+                Optional.empty(), new TextChunker(1000, 0), new HeuristicTokenCounter());
         var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
 
         service.ingest(doc, "content");
@@ -116,7 +117,7 @@ class DefaultDocumentIngestionServiceTest {
         var chunkStore = new CapturingChunkStore();
         var docStore = new CapturingDocumentStore();
         var service = new DefaultDocumentIngestionService(docStore, chunkStore, Optional.empty(),
-                new TextChunker(10, 0));
+                new TextChunker(10, 0), new HeuristicTokenCounter());
         var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
 
         var result = service.ingest(doc, "    "); // blank → no chunks

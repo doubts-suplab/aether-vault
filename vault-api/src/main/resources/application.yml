@@ -32,6 +32,8 @@ aether:
     ingestion:
       chunk-size: ${VAULT_CHUNK_SIZE:1000}
       chunk-overlap: ${VAULT_CHUNK_OVERLAP:150}
+    # Chunk token counting: 'bpe' (real tokenizer, default) or 'heuristic' (dependency-free estimate).
+    tokenizer: ${VAULT_TOKENIZER:bpe}
     source:
       enabled: ${VAULT_SOURCE_ENABLED:true}
       http:
@@ -44,6 +46,13 @@ aether:
         enabled: ${VAULT_SOURCE_FS_ENABLED:false}
         allowed-root: ${VAULT_SOURCE_FS_ALLOWED_ROOT:}
         max-bytes: ${VAULT_SOURCE_FS_MAX_BYTES:8388608}
+      s3:
+        # Off by default. Enable to ingest s3://bucket/key sources. Credentials come from the
+        # standard AWS provider chain; endpoint override supports S3-compatible stores (e.g. MinIO).
+        enabled: ${VAULT_SOURCE_S3_ENABLED:false}
+        region: ${VAULT_SOURCE_S3_REGION:us-east-1}
+        endpoint: ${VAULT_SOURCE_S3_ENDPOINT:}
+        max-bytes: ${VAULT_SOURCE_S3_MAX_BYTES:8388608}
     freshness:
       enabled: ${VAULT_FRESHNESS_ENABLED:true}
       reindex-interval-days: ${VAULT_REINDEX_INTERVAL_DAYS:30}

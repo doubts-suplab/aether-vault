@@ -65,8 +65,11 @@ Documents can be ingested from inline text *or* pulled from a source URI. `POST 
 
 - **Filesystem** (`file:`) — confined to a configured **allowed root**; path-traversal and absolute-path escapes are rejected before any read. Off unless enabled with an explicit root.
 - **HTTP(S)** (`http:` / `https:`) — fetched with a request timeout and a response-size cap; non-2xx is an error. On by default.
+- **S3 / object store** (`s3:`) — `s3://bucket/key` via the AWS SDK v2 with credentials from the standard provider chain (no hardcoded secrets); supports an endpoint override for S3-compatible stores (e.g. MinIO). Off by default.
 
 Source ingestion is **freshness-aware**: re-pointing at the same `sourceUri` checksums the fetched content and reports an `outcome` — `UNCHANGED` (identical content, *not* re-embedded), `INDEXED` (new or changed, re-indexed under the **same document ID**), or `FAILED`. One source URI maps to one stable document across re-ingestions.
+
+Chunk token counts (for context budgeting) come from a pluggable `TokenCounter` — a real BPE tokenizer (jtokkit `cl100k_base`) by default, replaceable via config, rather than a `chars/4` estimate.
 
 ### Knowledge Freshness
 
@@ -106,6 +109,11 @@ Aether Vault owns the **Knowledge** capability exclusively. Personal memory stay
 | `VAULT_SOURCE_FS_ENABLED` | `false` | Enable the filesystem source connector (requires an allowed root) |
 | `VAULT_SOURCE_FS_ALLOWED_ROOT` | _(unset)_ | Absolute directory tree `file:` sources are confined to |
 | `VAULT_SOURCE_FS_MAX_BYTES` | `8388608` | Max file size for `file:` sources (8 MiB) |
+| `VAULT_SOURCE_S3_ENABLED` | `false` | Enable the S3 / object-store source connector |
+| `VAULT_SOURCE_S3_REGION` | `us-east-1` | AWS region for the S3 client |
+| `VAULT_SOURCE_S3_ENDPOINT` | _(unset)_ | Endpoint override for an S3-compatible store (e.g. MinIO) |
+| `VAULT_SOURCE_S3_MAX_BYTES` | `8388608` | Max object size for `s3:` sources (8 MiB) |
+| `VAULT_TOKENIZER` | `bpe` | Chunk token counter: `bpe` (real tokenizer) or `heuristic` |
 | `VAULT_FRESHNESS_ENABLED` | `true` | Toggle the scheduled freshness sweep |
 | `VAULT_REINDEX_INTERVAL_DAYS` | `30` | Age beyond which an indexed document is flagged stale |
 | `VAULT_FRESHNESS_CRON` | `0 0 4 * * *` | Freshness sweep schedule |

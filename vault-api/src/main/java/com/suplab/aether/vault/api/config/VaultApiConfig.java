@@ -9,9 +9,12 @@ import com.suplab.aether.vault.engine.ingestion.TextChunker;
 import com.suplab.aether.vault.engine.rag.DefaultRagPipelineService;
 import com.suplab.aether.vault.engine.source.FilesystemSourceConnector;
 import com.suplab.aether.vault.engine.source.HttpSourceConnector;
+import com.suplab.aether.vault.engine.source.S3SourceConnector;
 import com.suplab.aether.vault.engine.source.SourceConnectorRegistry;
 import com.suplab.aether.vault.engine.store.JdbcKnowledgeDocumentStore;
 import com.suplab.aether.vault.engine.store.PGVectorDocumentChunkStore;
+import com.suplab.aether.vault.engine.tokenizer.HeuristicTokenCounter;
+import com.suplab.aether.vault.engine.tokenizer.JtokkitTokenCounter;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.DocumentIngestionPort;
 import com.suplab.aether.vault.ports.DocumentSourceConnector;
@@ -20,12 +23,16 @@ import com.suplab.aether.vault.ports.KnowledgeFreshnessPort;
 import com.suplab.aether.vault.ports.KnowledgeGraphStore;
 import com.suplab.aether.vault.ports.RagPipelinePort;
 import com.suplab.aether.vault.ports.SourceIngestionPort;
+import com.suplab.aether.vault.ports.TokenCounter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -81,15 +88,34 @@ public class VaultApiConfig {
     }
 
     /**
+     * Creates the token counter used to size chunks for downstream context budgeting.
+     *
+     * <p>Defaults to the real BPE tokenizer ({@link JtokkitTokenCounter}). Set
+     * {@code aether.vault.tokenizer=heuristic} to fall back to the dependency-free
+     * {@link HeuristicTokenCounter} — for environments that want no tokenizer data on the classpath.</p>
+     *
+     * @param tokenizer {@code bpe} (default) or {@code heuristic}
+     */
+    @Bean
+    public TokenCounter tokenCounter(@Value("${aether.vault.tokenizer:bpe}") String tokenizer) {
+        return "heuristic".equalsIgnoreCase(tokenizer)
+                ? new HeuristicTokenCounter()
+                : new JtokkitTokenCounter();
+    }
+
+    /**
      * Creates the document-indexing pipeline. The embedding service is optional so ingestion
-     * remains available (chunks stored with zero vectors) when Ollama is disabled.
+     * remains available (chunks stored with zero vectors) when Ollama is disabled; the token counter
+     * gives each chunk an accurate token count for budgeting.
      */
     @Bean
     public DocumentIngestionPort documentIngestionPort(KnowledgeDocumentStore documentStore,
                                                        DocumentChunkStore chunkStore,
                                                        Optional<KnowledgeEmbeddingService> embeddingService,
-                                                       TextChunker chunker) {
-        return new DefaultDocumentIngestionService(documentStore, chunkStore, embeddingService, chunker);
+                                                       TextChunker chunker,
+                                                       TokenCounter tokenCounter) {
+        return new DefaultDocumentIngestionService(documentStore, chunkStore, embeddingService, chunker,
+                tokenCounter);
     }
 
     /**
@@ -140,6 +166,31 @@ public class VaultApiConfig {
             @Value("${aether.vault.source.http.timeout-seconds:15}") long timeoutSeconds,
             @Value("${aether.vault.source.http.max-bytes:8388608}") long maxBytes) {
         return new HttpSourceConnector(Duration.ofSeconds(timeoutSeconds), maxBytes);
+    }
+
+    /**
+     * Creates the S3 object-store source connector.
+     *
+     * <p>Conditional on {@code aether.vault.source.s3.enabled=true} (off by default). The
+     * {@link S3Client} takes its region from {@code aether.vault.source.s3.region} and credentials
+     * from the standard AWS provider chain (env vars, profile, instance role) — never from code. An
+     * optional {@code endpoint} override supports S3-compatible stores (e.g. MinIO).</p>
+     *
+     * @param region   AWS region for the S3 client
+     * @param endpoint optional endpoint override for an S3-compatible store (blank = real AWS)
+     * @param maxBytes maximum object size accepted (default 8 MiB)
+     */
+    @Bean
+    @ConditionalOnProperty(name = "aether.vault.source.s3.enabled", havingValue = "true")
+    public S3SourceConnector s3SourceConnector(
+            @Value("${aether.vault.source.s3.region:us-east-1}") String region,
+            @Value("${aether.vault.source.s3.endpoint:}") String endpoint,
+            @Value("${aether.vault.source.s3.max-bytes:8388608}") long maxBytes) {
+        var builder = S3Client.builder().region(Region.of(region));
+        if (endpoint != null && !endpoint.isBlank()) {
+            builder = builder.endpointOverride(URI.create(endpoint));
+        }
+        return new S3SourceConnector(builder.build(), maxBytes);
     }
 
     /**

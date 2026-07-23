@@ -20,7 +20,7 @@
 
 **Capability owned (exclusively):** *Knowledge* — Document Indexing, Vector Search, Knowledge Graph, RAG Pipeline, Knowledge Freshness. Personal memory stays in Aether Core; shared team memory stays in Aether Memory. Vault owns **documents and the knowledge derived from them**, not memories.
 
-**Current status:** Phase 0 — Scaffold. This is the initial bootstrap of the standalone platform.
+**Current status:** Phase 1 — Ingestion & Retrieval Engine ✅ complete (source connectors for `file:`/`http(s):`/`s3:`, freshness-aware source ingestion, pluggable token counting, Testcontainers ITs wired into CI). Next: Phase 2 — Knowledge Graph Extraction.
 
 **One runnable application:**
 - `vault-api` — Knowledge Platform API (port 8084)

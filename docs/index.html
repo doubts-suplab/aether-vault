@@ -102,8 +102,8 @@
   <h1>Aether <span>Vault</span></h1>
   <p class="hero-sub">Organisational knowledge — document indexing, semantic vector search, a Retrieval-Augmented Generation pipeline, and a knowledge graph, scoped per tenant and collection.</p>
   <div class="badges">
-    <span class="badge green">Phase 0 — Scaffold ✅</span>
-    <span class="badge accent">Phase 1 — Ingestion &amp; Retrieval Engine 🔄</span>
+    <span class="badge green">Phase 1 — Ingestion &amp; Retrieval Engine ✅</span>
+    <span class="badge accent">Next: Phase 2 — Knowledge Graph Extraction</span>
     <span class="badge">Java 21</span>
     <span class="badge">Spring Boot 3.3</span>
     <span class="badge">pgvector</span>
@@ -131,7 +131,7 @@
     <div class="cap-card">
       <div class="type">Connectors</div>
       <h3>Source Ingestion</h3>
-      <p>Pull from <code>file:</code> (allowed-root confined) or <code>http(s):</code> sources through a default-deny registry — freshness-aware, so an unchanged source is never re-embedded.</p>
+      <p>Pull from <code>file:</code> (allowed-root confined), <code>http(s):</code>, or <code>s3:</code> sources through a default-deny registry — freshness-aware, so an unchanged source is never re-embedded.</p>
     </div>
     <div class="cap-card">
       <div class="type">Search</div>
@@ -229,7 +229,7 @@
   <h2>Roadmap</h2>
   <div class="roadmap">
     <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P0</span><span class="phase-name">Scaffold</span><span class="status-badge done">Complete</span></div>
-    <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P1</span><span class="phase-name">Ingestion &amp; Retrieval Engine — source connectors</span><span class="status-badge done">In progress</span></div>
+    <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P1</span><span class="phase-name">Ingestion &amp; Retrieval Engine</span><span class="status-badge done">Complete</span></div>
     <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P2</span><span class="phase-name">Knowledge Graph Extraction</span><span class="status-badge planned">Planned</span></div>
     <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P3</span><span class="phase-name">Freshness &amp; Governance</span><span class="status-badge planned">Planned</span></div>
     <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P4</span><span class="phase-name">Kubernetes + Helm</span><span class="status-badge planned">Planned</span></div>

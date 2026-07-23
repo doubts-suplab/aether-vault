@@ -27,8 +27,11 @@
     <spring-boot.version>3.3.5</spring-boot.version>
     <pgvector.version>0.1.4</pgvector.version>
     <testcontainers.version>1.20.3</testcontainers.version>
+    <aws-sdk.version>2.28.11</aws-sdk.version>
+    <jtokkit.version>1.1.0</jtokkit.version>
     <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.5.0</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
     <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
     <jacoco.line.coverage.minimum>0.80</jacoco.line.coverage.minimum>
     <!-- Default empty; JaCoCo prepare-agent overrides this with its -javaagent arg -->
@@ -50,6 +53,18 @@
         <version>${testcontainers.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws-sdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.knuddels</groupId>
+        <artifactId>jtokkit</artifactId>
+        <version>${jtokkit.version}</version>
       </dependency>
       <dependency>
         <groupId>com.pgvector</groupId>
@@ -105,6 +120,23 @@
           <configuration>
             <argLine>@{argLine} --enable-preview</argLine>
           </configuration>
+        </plugin>
+        <plugin>
+          <!-- Runs *IT integration tests (Testcontainers) in the verify phase. -->
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${maven-failsafe-plugin.version}</version>
+          <configuration>
+            <argLine>--enable-preview</argLine>
+          </configuration>
+          <executions>
+            <execution>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
         <plugin>
           <groupId>org.jacoco</groupId>
