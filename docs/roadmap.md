@@ -36,10 +36,11 @@
 
 | Deliverable | Status |
 |---|---|
-| Semantic `findSimilar` retrieval wired through the RAG endpoint | ⏳ |
-| Source connectors (filesystem, HTTP, S3) feeding the ingest pipeline | ⏳ |
-| Token-accurate chunking (model tokenizer instead of char estimate) | ⏳ |
-| Testcontainers coverage green in CI (chunk store, document store, graph) | ⏳ |
+| Semantic `findSimilar` retrieval wired through the RAG endpoint | ✅ |
+| Source connectors (filesystem, HTTP) feeding the ingest pipeline, default-deny + freshness-aware | ✅ |
+| S3 / object-store source connector (AWS SDK v2, injected client, endpoint override) | ✅ |
+| Token-accurate chunking — pluggable `TokenCounter`, real BPE tokenizer (jtokkit) replaces `chars/4` | ✅ |
+| Testcontainers coverage wired into CI via `maven-failsafe-plugin` (chunk store, document store, graph ITs run at `verify`) | ✅ |
 
 ---
 

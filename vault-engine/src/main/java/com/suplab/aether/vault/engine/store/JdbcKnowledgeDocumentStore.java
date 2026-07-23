@@ -87,6 +87,23 @@ public class JdbcKnowledgeDocumentStore implements KnowledgeDocumentStore {
     }
 
     @Override
+    public Optional<KnowledgeDocument> findBySourceUri(KnowledgeScope scope, String sourceUri) {
+        var sql = """
+                SELECT id, tenant_id, collection_id, source_uri, title, content_type, checksum,
+                       status, chunk_count, created_at, indexed_at, updated_at
+                FROM knowledge_documents
+                WHERE tenant_id = :tenantId AND collection_id = :collectionId AND source_uri = :sourceUri
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """;
+        var params = new MapSqlParameterSource()
+                .addValue("tenantId", scope.tenantId())
+                .addValue("collectionId", scope.collectionId())
+                .addValue("sourceUri", sourceUri);
+        return jdbc.query(sql, params, this::mapRow).stream().findFirst();
+    }
+
+    @Override
     public List<KnowledgeDocument> findByCollection(KnowledgeScope scope, int limit) {
         var sql = """
                 SELECT id, tenant_id, collection_id, source_uri, title, content_type, checksum,

@@ -6,6 +6,7 @@ import com.suplab.aether.vault.engine.embedding.KnowledgeEmbeddingService;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.DocumentIngestionPort;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
+import com.suplab.aether.vault.ports.TokenCounter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,28 +29,30 @@ import java.util.Optional;
  *       produced no usable chunks) and saved.</li>
  * </ol>
  *
- * <p>A rough token estimate ({@code chars / 4}) is stored per chunk for downstream budgeting; it
- * is intentionally cheap rather than model-exact.</p>
+ * <p>The token count stored per chunk comes from a pluggable {@link TokenCounter} — a real
+ * tokenizer, not a {@code chars / 4} guess — so downstream context budgeting is accurate.</p>
  */
 public class DefaultDocumentIngestionService implements DocumentIngestionPort {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultDocumentIngestionService.class);
     private static final int EMBEDDING_DIM = 384;
-    private static final int CHARS_PER_TOKEN_ESTIMATE = 4;
 
     private final KnowledgeDocumentStore documentStore;
     private final DocumentChunkStore chunkStore;
     private final Optional<KnowledgeEmbeddingService> embeddingService;
     private final TextChunker chunker;
+    private final TokenCounter tokenCounter;
 
     public DefaultDocumentIngestionService(KnowledgeDocumentStore documentStore,
                                            DocumentChunkStore chunkStore,
                                            Optional<KnowledgeEmbeddingService> embeddingService,
-                                           TextChunker chunker) {
+                                           TextChunker chunker,
+                                           TokenCounter tokenCounter) {
         this.documentStore = documentStore;
         this.chunkStore = chunkStore;
         this.embeddingService = embeddingService;
         this.chunker = chunker;
+        this.tokenCounter = tokenCounter;
     }
 
     @Override
@@ -69,8 +72,8 @@ public class DefaultDocumentIngestionService implements DocumentIngestionPort {
 
         for (int ordinal = 0; ordinal < pieces.size(); ordinal++) {
             var content = pieces.get(ordinal);
-            int tokenEstimate = Math.max(1, content.length() / CHARS_PER_TOKEN_ESTIMATE);
-            var chunk = DocumentChunk.create(document, ordinal, content, tokenEstimate);
+            int tokenCount = Math.max(1, tokenCounter.countTokens(content));
+            var chunk = DocumentChunk.create(document, ordinal, content, tokenCount);
             var embedding = embeddingService.map(svc -> svc.embed(content)).orElseGet(() -> new float[EMBEDDING_DIM]);
             chunkStore.save(chunk, embedding);
         }

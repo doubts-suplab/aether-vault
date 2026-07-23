@@ -90,6 +90,21 @@ class JdbcKnowledgeDocumentStoreIT {
     }
 
     @Test
+    void findBySourceUri_findsWithinScopeAndIsolatesAcrossCollections() {
+        var scope = uniqueScope();
+        var otherScope = KnowledgeScope.of(scope.tenantId(), scope.collectionId() + "-b");
+        var doc = KnowledgeDocument.create(scope, "file:policy.md", "Policy", "text/markdown", "sum-1");
+        store.save(doc);
+
+        assertThat(store.findBySourceUri(scope, "file:policy.md")).isPresent();
+        assertThat(store.findBySourceUri(scope, "file:policy.md").orElseThrow().id()).isEqualTo(doc.id());
+        // same source URI, different collection → not visible
+        assertThat(store.findBySourceUri(otherScope, "file:policy.md")).isEmpty();
+        // unknown source URI → empty
+        assertThat(store.findBySourceUri(scope, "file:missing.md")).isEmpty();
+    }
+
+    @Test
     void delete_removesDocumentWithinScope() {
         var scope = uniqueScope();
         var doc = KnowledgeDocument.create(scope, "uri", "t", "text/plain", "sum");

@@ -5,12 +5,12 @@
 
 ---
 
-**Active Phase:** Phase 0 — Scaffold ✅ (complete)
+**Active Phase:** Phase 1 — Ingestion & Retrieval Engine ✅ (complete) · next: Phase 2 — Knowledge Graph Extraction
 
 | Phase | Name | Status | Sessions |
 |---|---|---|---|
 | 0 | Scaffold | ✅ Complete | 1 |
-| 1 | Ingestion & Retrieval Engine | ⏳ Planned | — |
+| 1 | Ingestion & Retrieval Engine | ✅ Complete | 2 |
 | 2 | Knowledge Graph Extraction | ⏳ Planned | — |
 | 3 | Freshness & Governance | ⏳ Planned | — |
 | 4 | Kubernetes + Helm | ⏳ Planned | — |
@@ -59,7 +59,7 @@
 - `docker/docker-compose.yml`: postgres-vault (port 5435) + aether-vault (port 8084)
 - `k8s/`: namespace, deployment (probes, non-root, read-only fs), service + HPA + ConfigMap + Secret template
 
-**Tests — 56 unit tests green:**
+**Tests — 56 unit tests green (Phase 0):**
 - `KnowledgeDocumentTest` (14), `DocumentChunkTest` (6), `KnowledgeGraphDomainTest` (8), `RagContextAndQueryTest` (7), `KnowledgeScopeTest` (5)
 - `TextChunkerTest` (7), `DefaultRagPipelineServiceTest` (4), `DefaultDocumentIngestionServiceTest` (3)
 - `KnowledgeFreshnessSchedulerTest` (2): counter accumulation vs gauge-latest
@@ -72,3 +72,91 @@
 **Docs:**
 - `README.md`, `docs/index.html`, `docs/architecture.md`, `docs/roadmap.md`, `docs/progress.md`
 - GitHub Actions: `ci.yml`, `quality-gate.yml`, `docker-build.yml`
+
+---
+
+## Phase 1 — Ingestion & Retrieval Engine 🔄 (session 2)
+
+**Commit:** `feat(vault): add default-deny source connectors with freshness-aware ingestion`
+
+### What was done — source connectors
+
+The document ingest path previously accepted only inline `text`. Phase 1 adds a **connector-driven
+ingest path** so Vault can pull from an actual source, with freshness built in.
+
+**`vault-domain` — new contracts (still framework-free):**
+- `FetchedContent` record — the raw `(sourceUri, title, contentType, rawText)` a connector returns
+- `ContentChecksum` — shared SHA-256 fingerprint used by both ingest paths (inline text + sources)
+- `SourceFetchException` — domain signal for an unsupported/oversized/unreachable source
+- `DocumentSourceConnector` port — one scheme per connector; `supports` / `fetch`; a trust boundary
+- `SourceIngestionPort` — `ingestFromSource(scope, uri)` → `SourceIngestionResult` with an
+  `Outcome` of `INDEXED | UNCHANGED | FAILED`
+- `KnowledgeDocument.reregister(checksum, title, contentType)` — a PENDING copy that keeps the
+  document's identity so a changed source re-indexes in place (one `sourceUri` → one document)
+- `KnowledgeDocumentStore.findBySourceUri(scope, uri)` — the lookup that makes that possible
+
+**`vault-engine` — connectors + orchestration:**
+- `FilesystemSourceConnector` — `file:` sources confined to a configured **allowed root**
+  (path-traversal and absolute-escape rejected before any read) with a size cap
+- `HttpSourceConnector` — `http(s):` over `java.net.http.HttpClient` with request timeout,
+  `Content-Length` and decoded-body size caps, non-2xx → `SourceFetchException`
+- `SourceConnectorRegistry` — **default-deny** scheme resolution; unknown schemes are never fetched
+- `DefaultSourceIngestionService` — fetch → checksum → skip-if-unchanged → register/re-register →
+  index; composes the existing `DocumentIngestionPort`
+- `JdbcKnowledgeDocumentStore.findBySourceUri` — scoped source lookup
+
+**`vault-api`:**
+- `KnowledgeDocumentController` gains `POST …/documents/from-source` (`201` with
+  `outcome`; `400` on a bad/unsupported source; `503` when no connector is enabled) and now uses the
+  shared `ContentChecksum` (private duplicate removed)
+- `VaultApiConfig` wires the HTTP connector (on by default), the filesystem connector (off unless
+  `aether.vault.source.filesystem.enabled=true` with an allowed root), the registry, and the source
+  ingest service
+- `application.yml` — `aether.vault.source.*` config surface (enable flags, timeouts, size caps)
+
+**`vault-infra` / migrations:**
+- `V005__index_documents_by_source_uri.sql` — `(tenant_id, collection_id, source_uri)` index backing
+  `findBySourceUri` (added to api, engine test, and infra reference copies)
+
+**Tests — 88 unit tests green (was 56):**
+- Domain: `FetchedContentTest` (6), `ContentChecksumTest` (5), `KnowledgeDocumentReregisterTest` (3)
+- Engine: `FilesystemSourceConnectorTest` (6, incl. path-traversal + size cap), `HttpSourceConnectorTest`
+  (4, real JDK `HttpServer`), `SourceConnectorRegistryTest` (4, default-deny),
+  `DefaultSourceIngestionServiceTest` (4, new/unchanged/changed/stale)
+- IT: `JdbcKnowledgeDocumentStoreIT` gains a `findBySourceUri` scope-isolation case
+
+### What was done — token counting, S3, CI ITs (session 2b)
+
+**Commit:** `feat(vault): token-accurate chunking, S3 source connector, failsafe ITs in CI`
+
+Completes Phase 1: the last three deliverables.
+
+**Token-accurate chunking (pluggable tokenizer):**
+- `TokenCounter` port (domain) — replaceable like the embedding service; the ingest/RAG paths depend on the port, not a concrete tokenizer
+- `JtokkitTokenCounter` (engine) — a real BPE tokenizer (`cl100k_base` via jtokkit), the default; a strong proxy for context-window budgeting since the RAG context is consumed by the caller's LLM
+- `HeuristicTokenCounter` (engine) — dependency-free sub-word estimate fallback
+- `DefaultDocumentIngestionService` now sizes each chunk's `tokenCount` via the `TokenCounter` (the `chars / 4` estimate is gone); `VaultApiConfig` wires the tokenizer (`aether.vault.tokenizer=bpe|heuristic`)
+
+**S3 / object-store source connector:**
+- `S3SourceConnector` (engine) — `s3://bucket/key` via an injected AWS SDK v2 `S3Client`
+  (`getObjectAsBytes`), size cap, credentials from the standard provider chain (no hardcoded secrets)
+- `VaultApiConfig` adds the S3 connector bean (off unless `aether.vault.source.s3.enabled=true`),
+  with region + optional endpoint override (S3-compatible stores like MinIO); the connector joins the
+  same default-deny registry, so `s3:` is now an ingestible scheme
+- `application.yml` — `aether.vault.source.s3.*` config surface
+
+**Testcontainers green in CI:**
+- `maven-failsafe-plugin` wired in the parent (pluginManagement) and activated in `vault-engine` — the
+  `*IT` Testcontainers integration tests (`PGVectorDocumentChunkStoreIT`, `JdbcKnowledgeDocumentStoreIT`,
+  `JdbcKnowledgeGraphStoreIT`) now run in the `verify` phase. Previously no failsafe plugin existed, so
+  surefire never picked up `*IT` and the ITs did not execute in CI at all.
+
+**Build:**
+- Parent POM: AWS SDK v2 BOM + jtokkit in dependency management; `aws-sdk`/`jtokkit` versions;
+  `maven-failsafe-plugin` managed
+- `vault-engine`: depends on `software.amazon.awssdk:s3` and `com.knuddels:jtokkit`; activates failsafe
+
+**Tests — 102 unit tests green (was 88):**
+- Engine: `JtokkitTokenCounterTest` (4), `HeuristicTokenCounterTest` (4), `S3SourceConnectorTest`
+  (6, Mockito-mocked `S3Client`)
+- `mvn -DskipITs verify` passes the JaCoCo 80% line-coverage gate; the ITs run under failsafe in CI

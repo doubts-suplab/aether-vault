@@ -102,8 +102,8 @@
   <h1>Aether <span>Vault</span></h1>
   <p class="hero-sub">Organisational knowledge — document indexing, semantic vector search, a Retrieval-Augmented Generation pipeline, and a knowledge graph, scoped per tenant and collection.</p>
   <div class="badges">
-    <span class="badge green">Phase 0 — Scaffold</span>
-    <span class="badge accent">Next: Phase 1 — Ingestion &amp; Retrieval Engine</span>
+    <span class="badge green">Phase 1 — Ingestion &amp; Retrieval Engine ✅</span>
+    <span class="badge accent">Next: Phase 2 — Knowledge Graph Extraction</span>
     <span class="badge">Java 21</span>
     <span class="badge">Spring Boot 3.3</span>
     <span class="badge">pgvector</span>
@@ -126,7 +126,12 @@
     <div class="cap-card">
       <div class="type">Indexing</div>
       <h3>Document Ingestion</h3>
-      <p>Chunk, embed (384-dim), and store documents — idempotently, so re-indexing never leaves stale chunks.</p>
+      <p>Chunk, embed (384-dim), and store documents — from inline text or a source URI, idempotently, so re-indexing never leaves stale chunks.</p>
+    </div>
+    <div class="cap-card">
+      <div class="type">Connectors</div>
+      <h3>Source Ingestion</h3>
+      <p>Pull from <code>file:</code> (allowed-root confined), <code>http(s):</code>, or <code>s3:</code> sources through a default-deny registry — freshness-aware, so an unchanged source is never re-embedded.</p>
     </div>
     <div class="cap-card">
       <div class="type">Search</div>
@@ -158,7 +163,7 @@
   <h2>From Document to Prompt Context</h2>
   <p class="section-intro">A document is chunked and embedded on ingest; a query is embedded and matched against those chunks, then assembled into a bounded context — retrieval never leaves the collection.</p>
   <div class="flow">
-    <div class="flow-step"><div class="lvl">INGEST</div><p>Register document, compute checksum.</p></div>
+    <div class="flow-step"><div class="lvl">INGEST</div><p>Inline text or a source connector; register, compute checksum.</p></div>
     <div class="flow-arrow">→</div>
     <div class="flow-step"><div class="lvl">CHUNK</div><p>Split into overlapping slices.</p></div>
     <div class="flow-arrow">→</div>
@@ -205,7 +210,8 @@
     <table>
       <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents</code></td><td>Ingest a document (chunk + embed + index)</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents</code></td><td>Ingest a document from inline text</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents/from-source</code></td><td>Ingest from a source URI (connector, freshness-aware)</td></tr>
         <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents</code></td><td>List documents in a collection</td></tr>
         <tr><td><span class="method delete">DEL</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents/{id}</code></td><td>Delete a document and its chunks</td></tr>
         <tr><td><span class="method post">POST</span></td><td><code>/api/v1/rag/query</code></td><td>Vector search + bounded context assembly</td></tr>
@@ -223,7 +229,7 @@
   <h2>Roadmap</h2>
   <div class="roadmap">
     <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P0</span><span class="phase-name">Scaffold</span><span class="status-badge done">Complete</span></div>
-    <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P1</span><span class="phase-name">Ingestion &amp; Retrieval Engine</span><span class="status-badge planned">Planned</span></div>
+    <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P1</span><span class="phase-name">Ingestion &amp; Retrieval Engine</span><span class="status-badge done">Complete</span></div>
     <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P2</span><span class="phase-name">Knowledge Graph Extraction</span><span class="status-badge planned">Planned</span></div>
     <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P3</span><span class="phase-name">Freshness &amp; Governance</span><span class="status-badge planned">Planned</span></div>
     <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P4</span><span class="phase-name">Kubernetes + Helm</span><span class="status-badge planned">Planned</span></div>
