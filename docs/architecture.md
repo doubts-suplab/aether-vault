@@ -67,7 +67,9 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `KnowledgeDocumentStore` | `JdbcKnowledgeDocumentStore` | Persist/retrieve document metadata; scoped |
 | `DocumentChunkStore` | `PGVectorDocumentChunkStore` | Persist chunks + embeddings; cosine vector search |
 | `KnowledgeGraphStore` | `JdbcKnowledgeGraphStore` | Entities (upsert + mention) and relations; neighbour traversal |
-| `DocumentIngestionPort` | `DefaultDocumentIngestionService` | Chunk + embed + index a document (idempotent) |
+| `DocumentIngestionPort` | `DefaultDocumentIngestionService` | Chunk + embed + index a document (idempotent); runs graph extraction after indexing |
+| `EntityExtractor` | `HeuristicEntityExtractor` (default) | NER over chunk text → `ExtractedEntity` mentions; dependency-free, model-/LLM-based extractor pluggable |
+| `GraphExtractionPort` | `DefaultKnowledgeGraphExtractionService` | Upsert entities + record co-occurrence relations from a document's chunks |
 | `DocumentSourceConnector` | `FilesystemSourceConnector`, `HttpSourceConnector`, `S3SourceConnector` | Fetch raw content from a source URI (one scheme each); trust boundary |
 | `SourceIngestionPort` | `DefaultSourceIngestionService` | Fetch → checksum → skip-if-unchanged → (re-)index from a source URI |
 | `TokenCounter` | `JtokkitTokenCounter` (default), `HeuristicTokenCounter` | Count chunk tokens for context budgeting; tokenizer is replaceable |
@@ -108,6 +110,7 @@ The knowledge graph is persisted as relational adjacency tables rather than a na
 ### 5.1 Ingest (document indexing)
 1. `POST …/collections/{collectionId}/documents` → compute SHA-256 `checksum`, register `KnowledgeDocument` (PENDING).
 2. `DocumentIngestionPort.ingest` deletes any prior chunks, splits text with `TextChunker` (size/overlap configurable), embeds each chunk via Ollama, saves chunks, and marks the document `INDEXED` (or `FAILED` when no chunks are produced). Re-posting the same document re-indexes it in place.
+3. After indexing, if a `GraphExtractionPort` is present the pipeline runs **best-effort graph extraction** over the chunks (Phase 2 — see §5.3). A failure there is logged and swallowed: the document stays `INDEXED`.
 
 ### 5.1.1 Ingest from a source (connector-driven)
 1. `POST …/collections/{collectionId}/documents/from-source` with `{"sourceUri": "…"}`.
@@ -124,6 +127,7 @@ The knowledge graph is persisted as relational adjacency tables rather than a na
 1. `POST …/entities` upserts a node (`ON CONFLICT … mention_count + 1`).
 2. `POST …/entities/{id}/relations` verifies both endpoints exist in scope, then inserts an edge.
 3. `GET …/entities/{id}/neighbours` traverses edges from either direction, scoped.
+4. **Automatic extraction (Phase 2):** at the end of ingestion, `DefaultKnowledgeGraphExtractionService` runs the pluggable `EntityExtractor` over each chunk, upserts every mention (bumping `mention_count`), and records a `co_occurs_with` relation between each distinct pair of entities co-occurring in a chunk. Pairing is bounded to the first *N* entities per chunk (default 8) to avoid a quadratic edge blow-up; edges are written in a canonical direction (smaller UUID → larger) so a symmetric co-occurrence is stored once, and both upsert and relate are idempotent, so re-ingesting a document is safe. The default extractor is dependency-free (`HeuristicEntityExtractor`); a model-/LLM-based extractor is a drop-in behind the `EntityExtractor` port.
 
 ### 5.4 Freshness (set-based)
 1. Scheduler (`@Scheduled`, default 04:00) → `KnowledgeFreshnessPort.sweep`.

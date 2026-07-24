@@ -5,13 +5,13 @@
 
 ---
 
-**Active Phase:** Phase 1 — Ingestion & Retrieval Engine ✅ (complete) · next: Phase 2 — Knowledge Graph Extraction
+**Active Phase:** Phase 2 — Knowledge Graph Extraction 🔄 (core complete: automatic entity + co-occurrence extraction on ingest; entity-aware RAG + resolution follow-up)
 
 | Phase | Name | Status | Sessions |
 |---|---|---|---|
 | 0 | Scaffold | ✅ Complete | 1 |
 | 1 | Ingestion & Retrieval Engine | ✅ Complete | 2 |
-| 2 | Knowledge Graph Extraction | ⏳ Planned | — |
+| 2 | Knowledge Graph Extraction | 🔄 Core complete (extraction on ingest) | 3 |
 | 3 | Freshness & Governance | ⏳ Planned | — |
 | 4 | Kubernetes + Helm | ⏳ Planned | — |
 
@@ -72,6 +72,54 @@
 **Docs:**
 - `README.md`, `docs/index.html`, `docs/architecture.md`, `docs/roadmap.md`, `docs/progress.md`
 - GitHub Actions: `ci.yml`, `quality-gate.yml`, `docker-build.yml`
+
+---
+
+## Phase 2 — Knowledge Graph Extraction 🔄 (session 3 — extraction on ingest)
+
+**Commit:** `feat(vault): automatic entity + co-occurrence graph extraction on ingest`
+
+Phase 1 built the knowledge-graph *store* and manual entity/relation endpoints. Phase 2 makes the
+graph **build itself**: during ingestion, entities and their co-occurrence relations are extracted
+from the chunks automatically — no manual curation required.
+
+### What was done
+
+**`vault-domain` — new contracts (framework-free):**
+- `ExtractedEntity` record — a raw `(name, type)` mention, before it is resolved to a graph node.
+- `EntityExtractor` port — NER over a piece of text → `List<ExtractedEntity>`; deliberately
+  model-agnostic so the extractor is pluggable.
+- `GraphExtractionPort` port — `extract(document, chunks) → ExtractionSummary(entitiesFound, relationsCreated)`.
+
+**`vault-engine` — the pipeline:**
+- `HeuristicEntityExtractor` — a dependency-free, deterministic default: capitalised-run detection
+  with sentence-initial stopword stripping, coarse type classification (org suffix / acronym →
+  ORGANISATION, two-token name → PERSON, else CONCEPT). Vault builds a graph with no NLP runtime on
+  the classpath, mirroring `HeuristicTokenCounter`; a model-/LLM-based extractor is a drop-in behind
+  the same port.
+- `DefaultKnowledgeGraphExtractionService` — upserts each mention (bumping `mention_count`) and
+  records a `co_occurs_with` relation between each distinct pair of entities co-occurring in a chunk.
+  Pairing is bounded (first *N*=8 per chunk) to avoid quadratic edges; edges are written canonically
+  (smaller UUID → larger) so a symmetric co-occurrence is stored once; upsert + relate are idempotent,
+  so re-ingestion is safe.
+- Hooked into `DefaultDocumentIngestionService`: extraction runs after the document is `INDEXED`, as
+  **best-effort augmentation** — a failure is logged and swallowed, the document stays `INDEXED`.
+  Wired via an optional `GraphExtractionPort` bean (on by default,
+  `aether.vault.graph.extraction.enabled`).
+
+**Tests — 119 unit tests green:**
+- Domain `ExtractedEntityTest`; engine `HeuristicEntityExtractorTest` (classification + stopword +
+  dedup + cap), `DefaultKnowledgeGraphExtractionServiceTest` (fakes — co-occurrence, canonical
+  direction, cap, cross-chunk mention bump), plus ingest-hook cases (invoked, failure swallowed,
+  skipped on FAILED). New `DefaultKnowledgeGraphExtractionServiceIT` runs the heuristic extractor +
+  real JDBC store end-to-end under failsafe.
+- `mvn -DskipITs verify` passes the JaCoCo 80% gate.
+
+### Remaining Phase 2 (follow-up)
+- **Entity-aware RAG** — re-rank / expand retrieval using the graph.
+- **Model-/LLM-based extractor** behind the `EntityExtractor` port (higher precision + real relations).
+- **Entity resolution / de-duplication** (alias + fuzzy match).
+- **Graph-store evaluation** — recursive CTE → Apache AGE → native graph DB (ADR-0008).
 
 ---
 

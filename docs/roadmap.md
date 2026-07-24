@@ -44,17 +44,19 @@
 
 ---
 
-## Phase 2 — Knowledge Graph Extraction
+## Phase 2 — Knowledge Graph Extraction 🔄 (core complete)
 
 **Goal:** Automatic entity + relation extraction during ingestion.
 
 | Deliverable | Status |
 |---|---|
-| NER-based entity extraction on ingest | ⏳ |
-| Relation extraction between co-occurring entities | ⏳ |
-| Graph-augmented retrieval (entity-aware RAG) | ⏳ |
-| Entity resolution / de-duplication | ⏳ |
-| Graph-store evaluation — recursive CTE → Apache AGE → native graph DB, gated on traversal depth/latency once extraction produces a dense graph (see ADR-0008) | ⏳ |
+| NER-based entity extraction on ingest (pluggable `EntityExtractor`; dependency-free heuristic default) | ✅ |
+| Relation extraction between co-occurring entities (`co_occurs_with`, canonical, bounded, idempotent) | ✅ |
+| Extraction wired into the ingest pipeline as best-effort augmentation (`GraphExtractionPort`) | ✅ |
+| Graph-augmented retrieval (entity-aware RAG) | ⏳ (follow-up) |
+| Model-/LLM-based entity extractor behind the `EntityExtractor` port | ⏳ (follow-up) |
+| Entity resolution / de-duplication (alias + fuzzy match) | ⏳ (follow-up) |
+| Graph-store evaluation — recursive CTE → Apache AGE → native graph DB, gated on traversal depth/latency once extraction produces a dense graph (see ADR-0008) | ⏳ (follow-up) |
 
 ---
 
