@@ -2,6 +2,8 @@ package com.suplab.aether.vault.api.config;
 
 import com.suplab.aether.vault.engine.embedding.KnowledgeEmbeddingService;
 import com.suplab.aether.vault.engine.freshness.DocumentFreshnessService;
+import com.suplab.aether.vault.engine.graph.DefaultKnowledgeGraphExtractionService;
+import com.suplab.aether.vault.engine.graph.HeuristicEntityExtractor;
 import com.suplab.aether.vault.engine.graph.JdbcKnowledgeGraphStore;
 import com.suplab.aether.vault.engine.ingestion.DefaultDocumentIngestionService;
 import com.suplab.aether.vault.engine.ingestion.DefaultSourceIngestionService;
@@ -18,6 +20,8 @@ import com.suplab.aether.vault.engine.tokenizer.JtokkitTokenCounter;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.DocumentIngestionPort;
 import com.suplab.aether.vault.ports.DocumentSourceConnector;
+import com.suplab.aether.vault.ports.EntityExtractor;
+import com.suplab.aether.vault.ports.GraphExtractionPort;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
 import com.suplab.aether.vault.ports.KnowledgeFreshnessPort;
 import com.suplab.aether.vault.ports.KnowledgeGraphStore;
@@ -75,6 +79,40 @@ public class VaultApiConfig {
     }
 
     /**
+     * Creates the entity extractor used during ingestion (Phase 2 NER).
+     *
+     * <p>Defaults to the dependency-free {@link HeuristicEntityExtractor}, so Vault extracts a graph
+     * with no NLP runtime on the classpath. A model-/LLM-based extractor implementing
+     * {@link EntityExtractor} can replace this behind the same port.</p>
+     *
+     * @param maxEntitiesPerChunk cap on distinct entities returned from a single chunk
+     */
+    @Bean
+    public EntityExtractor entityExtractor(
+            @Value("${aether.vault.graph.max-entities-per-chunk:32}") int maxEntitiesPerChunk) {
+        return new HeuristicEntityExtractor(maxEntitiesPerChunk);
+    }
+
+    /**
+     * Creates the knowledge-graph extraction pipeline (entities + co-occurrence relations).
+     *
+     * <p>Conditional on {@code aether.vault.graph.extraction.enabled=true} (default). When present it
+     * is injected into the ingestion pipeline and runs automatically after each document is indexed;
+     * disable it to index documents without building the graph.</p>
+     *
+     * @param maxEntitiesForRelations cap on entities-per-chunk considered for pairwise relations
+     */
+    @Bean
+    @ConditionalOnProperty(name = "aether.vault.graph.extraction.enabled", havingValue = "true",
+            matchIfMissing = true)
+    public GraphExtractionPort graphExtractionPort(
+            EntityExtractor entityExtractor,
+            KnowledgeGraphStore graphStore,
+            @Value("${aether.vault.graph.max-entities-for-relations:8}") int maxEntitiesForRelations) {
+        return new DefaultKnowledgeGraphExtractionService(entityExtractor, graphStore, maxEntitiesForRelations);
+    }
+
+    /**
      * Creates the text chunker used by the ingestion pipeline.
      *
      * @param chunkSize maximum characters per chunk (default 1000)
@@ -106,16 +144,18 @@ public class VaultApiConfig {
     /**
      * Creates the document-indexing pipeline. The embedding service is optional so ingestion
      * remains available (chunks stored with zero vectors) when Ollama is disabled; the token counter
-     * gives each chunk an accurate token count for budgeting.
+     * gives each chunk an accurate token count for budgeting; graph extraction is optional and, when
+     * present, populates the knowledge graph automatically after each document is indexed.
      */
     @Bean
     public DocumentIngestionPort documentIngestionPort(KnowledgeDocumentStore documentStore,
                                                        DocumentChunkStore chunkStore,
                                                        Optional<KnowledgeEmbeddingService> embeddingService,
                                                        TextChunker chunker,
-                                                       TokenCounter tokenCounter) {
+                                                       TokenCounter tokenCounter,
+                                                       Optional<GraphExtractionPort> graphExtraction) {
         return new DefaultDocumentIngestionService(documentStore, chunkStore, embeddingService, chunker,
-                tokenCounter);
+                tokenCounter, graphExtraction);
     }
 
     /**

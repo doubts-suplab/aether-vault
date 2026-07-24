@@ -7,6 +7,7 @@ import com.suplab.aether.vault.domain.KnowledgeScope;
 import com.suplab.aether.vault.domain.RetrievedChunk;
 import com.suplab.aether.vault.engine.tokenizer.HeuristicTokenCounter;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
+import com.suplab.aether.vault.ports.GraphExtractionPort;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
 import org.junit.jupiter.api.Test;
 
@@ -87,7 +88,7 @@ class DefaultDocumentIngestionServiceTest {
         var chunkStore = new CapturingChunkStore();
         var docStore = new CapturingDocumentStore();
         var service = new DefaultDocumentIngestionService(docStore, chunkStore, Optional.empty(),
-                new TextChunker(10, 0), new HeuristicTokenCounter());
+                new TextChunker(10, 0), new HeuristicTokenCounter(), Optional.empty());
         var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
 
         var result = service.ingest(doc, "abcdefghijklmnopqrst"); // 20 chars → 2 chunks
@@ -104,7 +105,7 @@ class DefaultDocumentIngestionServiceTest {
     void ingest_deletesPriorChunksFirst() {
         var chunkStore = new CapturingChunkStore();
         var service = new DefaultDocumentIngestionService(new CapturingDocumentStore(), chunkStore,
-                Optional.empty(), new TextChunker(1000, 0), new HeuristicTokenCounter());
+                Optional.empty(), new TextChunker(1000, 0), new HeuristicTokenCounter(), Optional.empty());
         var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
 
         service.ingest(doc, "content");
@@ -113,11 +114,69 @@ class DefaultDocumentIngestionServiceTest {
     }
 
     @Test
+    void ingest_invokesGraphExtractionWithIndexedDocumentAndChunks() {
+        var chunkStore = new CapturingChunkStore();
+        var docStore = new CapturingDocumentStore();
+        var extraction = new CapturingGraphExtraction();
+        var service = new DefaultDocumentIngestionService(docStore, chunkStore, Optional.empty(),
+                new TextChunker(10, 0), new HeuristicTokenCounter(), Optional.of(extraction));
+        var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
+
+        service.ingest(doc, "abcdefghijklmnopqrst"); // 2 chunks
+
+        assertThat(extraction.calls).isEqualTo(1);
+        assertThat(extraction.lastDocument.status()).isEqualTo(DocumentStatus.INDEXED);
+        assertThat(extraction.lastChunks).hasSize(2);
+    }
+
+    @Test
+    void ingest_swallowsGraphExtractionFailure() {
+        var service = new DefaultDocumentIngestionService(new CapturingDocumentStore(),
+                new CapturingChunkStore(), Optional.empty(), new TextChunker(1000, 0),
+                new HeuristicTokenCounter(), Optional.of((document, chunks) -> {
+                    throw new IllegalStateException("boom");
+                }));
+        var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
+
+        var result = service.ingest(doc, "content"); // must still succeed
+
+        assertThat(result.status()).isEqualTo(DocumentStatus.INDEXED);
+    }
+
+    @Test
+    void ingest_skipsGraphExtractionForFailedDocument() {
+        var extraction = new CapturingGraphExtraction();
+        var service = new DefaultDocumentIngestionService(new CapturingDocumentStore(),
+                new CapturingChunkStore(), Optional.empty(), new TextChunker(10, 0),
+                new HeuristicTokenCounter(), Optional.of(extraction));
+        var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
+
+        service.ingest(doc, "    "); // no chunks → FAILED
+
+        assertThat(extraction.calls).isZero();
+    }
+
+    /** Captures graph-extraction invocations. */
+    private static final class CapturingGraphExtraction implements GraphExtractionPort {
+        int calls = 0;
+        KnowledgeDocument lastDocument;
+        List<String> lastChunks;
+
+        @Override
+        public ExtractionSummary extract(KnowledgeDocument document, List<String> chunks) {
+            calls++;
+            lastDocument = document;
+            lastChunks = chunks;
+            return new ExtractionSummary(chunks.size(), 0);
+        }
+    }
+
+    @Test
     void ingest_marksFailedWhenNoChunksProduced() {
         var chunkStore = new CapturingChunkStore();
         var docStore = new CapturingDocumentStore();
         var service = new DefaultDocumentIngestionService(docStore, chunkStore, Optional.empty(),
-                new TextChunker(10, 0), new HeuristicTokenCounter());
+                new TextChunker(10, 0), new HeuristicTokenCounter(), Optional.empty());
         var doc = KnowledgeDocument.create(SCOPE, "uri", "title", "text/plain", "sum");
 
         var result = service.ingest(doc, "    "); // blank → no chunks

@@ -5,6 +5,7 @@ import com.suplab.aether.vault.domain.KnowledgeDocument;
 import com.suplab.aether.vault.engine.embedding.KnowledgeEmbeddingService;
 import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.DocumentIngestionPort;
+import com.suplab.aether.vault.ports.GraphExtractionPort;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
 import com.suplab.aether.vault.ports.TokenCounter;
 import org.slf4j.Logger;
@@ -31,6 +32,11 @@ import java.util.Optional;
  *
  * <p>The token count stored per chunk comes from a pluggable {@link TokenCounter} — a real
  * tokenizer, not a {@code chars / 4} guess — so downstream context budgeting is accurate.</p>
+ *
+ * <p>When a {@link GraphExtractionPort} is present, the pipeline also extracts knowledge-graph
+ * entities and co-occurrence relations from the chunks after indexing (Phase 2). Extraction is
+ * best-effort augmentation: a failure there is logged and swallowed so it never fails an otherwise
+ * successful index.</p>
  */
 public class DefaultDocumentIngestionService implements DocumentIngestionPort {
 
@@ -42,17 +48,20 @@ public class DefaultDocumentIngestionService implements DocumentIngestionPort {
     private final Optional<KnowledgeEmbeddingService> embeddingService;
     private final TextChunker chunker;
     private final TokenCounter tokenCounter;
+    private final Optional<GraphExtractionPort> graphExtraction;
 
     public DefaultDocumentIngestionService(KnowledgeDocumentStore documentStore,
                                            DocumentChunkStore chunkStore,
                                            Optional<KnowledgeEmbeddingService> embeddingService,
                                            TextChunker chunker,
-                                           TokenCounter tokenCounter) {
+                                           TokenCounter tokenCounter,
+                                           Optional<GraphExtractionPort> graphExtraction) {
         this.documentStore = documentStore;
         this.chunkStore = chunkStore;
         this.embeddingService = embeddingService;
         this.chunker = chunker;
         this.tokenCounter = tokenCounter;
+        this.graphExtraction = graphExtraction;
     }
 
     @Override
@@ -83,6 +92,24 @@ public class DefaultDocumentIngestionService implements DocumentIngestionPort {
         log.info("Indexed documentId={} tenantId={} collectionId={} chunks={} embeddingEnabled={}",
                 indexed.id(), indexed.tenantId(), indexed.collectionId(), pieces.size(),
                 embeddingService.isPresent());
+
+        extractGraph(indexed, pieces);
         return new IngestionResult(indexed.id(), pieces.size(), indexed.status());
+    }
+
+    /**
+     * Runs best-effort knowledge-graph extraction over the indexed chunks. Any failure is logged and
+     * swallowed — the document is already indexed, and the graph is augmentation, not a gate.
+     */
+    private void extractGraph(KnowledgeDocument indexed, List<String> pieces) {
+        if (graphExtraction.isEmpty()) return;
+        try {
+            var summary = graphExtraction.get().extract(indexed, pieces);
+            log.info("Graph-extracted documentId={} entities={} relations={}",
+                    indexed.id(), summary.entitiesFound(), summary.relationsCreated());
+        } catch (RuntimeException e) {
+            log.warn("Graph extraction failed for documentId={} — document remains INDEXED: {}",
+                    indexed.id(), e.getMessage());
+        }
     }
 }
