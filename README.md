@@ -1,4 +1,4 @@
-# Aether Vault
+# Æ Aether Vault
 
 > Organisational knowledge — the platform layer that ingests documents, serves semantic search and RAG, and builds a knowledge graph, all scoped per tenant and collection.
 
