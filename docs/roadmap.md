@@ -83,3 +83,20 @@
 | Helm chart `vault-infra/helm/aether-vault/` | ⏳ |
 | HPA (min 2, max 8 replicas) | ✅ (manifest) |
 | Docker build + Helm release workflows | ⏳ |
+
+---
+
+## Ecosystem review — future backlog
+
+> Repo-specific items from the [ecosystem improvement backlog](https://github.com/doubts-suplab/aether/blob/main/docs/roadmaps/ecosystem-improvements.md). Planned, not started.
+> Feasibility: **S** small · **M** moderate · **L** large. License unchanged (AGPL-3.0).
+
+| Item | Feasibility |
+|---|---|
+| More enterprise connectors (SharePoint, Confluence, Google Drive, …) | M each / L aggregate |
+| Higher-quality entity/relation extraction (LLM-assisted / hybrid) *(Phase 2 follow-up)* | M–L |
+| Hybrid search (vector + keyword) | M |
+| Multi-modal support | L |
+| Re-indexing pipelines | M |
+| RAG-quality evaluation (retrieval precision/recall, context usefulness) | M |
+| Entity-aware RAG + entity resolution/de-dup *(Phase 2 follow-ups)* | M–L |
