@@ -73,7 +73,7 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `DocumentSourceConnector` | `FilesystemSourceConnector`, `HttpSourceConnector`, `S3SourceConnector` | Fetch raw content from a source URI (one scheme each); trust boundary |
 | `SourceIngestionPort` | `DefaultSourceIngestionService` | Fetch → checksum → skip-if-unchanged → (re-)index from a source URI |
 | `TokenCounter` | `JtokkitTokenCounter` (default), `HeuristicTokenCounter` | Count chunk tokens for context budgeting; tokenizer is replaceable |
-| `RagPipelinePort` | `DefaultRagPipelineService` | Embed query → vector search → bounded context |
+| `RagPipelinePort` | `DefaultRagPipelineService` | Embed query → vector search → bounded context; `retrieveWithGraph` adds a bounded knowledge-graph projection (entity-aware RAG, best-effort) |
 | `KnowledgeFreshnessPort` | `DocumentFreshnessService` | Set-based re-index staleness sweep |
 
 Connector selection goes through `SourceConnectorRegistry` — **default-deny**: a URI no registered
@@ -122,6 +122,7 @@ The knowledge graph is persisted as relational adjacency tables rather than a na
 1. `POST /api/v1/rag/query` → `DefaultRagPipelineService` clamps `topK`, embeds `queryText`.
 2. `DocumentChunkStore.findSimilar` runs `ORDER BY embedding <=> :query::vector` **scoped to one collection**, joining `knowledge_documents` for citation.
 3. Retrieved chunks are assembled into a `RagContext` bounded to `MAX_CONTEXT_CHARS`.
+4. **Entity-aware RAG** (opt-in `"includeGraph": true` → `retrieveWithGraph`): the `EntityExtractor` recognises entities in the query text, `KnowledgeGraphStore.findByName` resolves each against the collection graph, and `neighbours` expands matched entities by one edge. The result is a bounded `GraphContext` (`MAX_ENTITIES`, matched-first then by salience) with matched + related entities and a prompt-ready summary, returned alongside the text context. All within the same `tenantId` + `collectionId` scope; **best-effort** — a missing extractor/graph or a failed lookup yields an empty graph and never breaks retrieval.
 
 ### 5.3 Knowledge graph
 1. `POST …/entities` upserts a node (`ON CONFLICT … mention_count + 1`).

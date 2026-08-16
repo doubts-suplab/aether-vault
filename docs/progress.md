@@ -5,7 +5,7 @@
 
 ---
 
-**Active Phase:** Phase 2 — Knowledge Graph Extraction 🔄 (core complete: automatic entity + co-occurrence extraction on ingest; entity-aware RAG + resolution follow-up)
+**Active Phase:** Phase 2 — Knowledge Graph Extraction 🔄 (core complete: automatic entity + co-occurrence extraction on ingest + entity-aware RAG; model-/LLM-extractor + entity resolution follow-up)
 
 | Phase | Name | Status | Sessions |
 |---|---|---|---|
@@ -72,6 +72,54 @@
 **Docs:**
 - `README.md`, `docs/index.html`, `docs/architecture.md`, `docs/roadmap.md`, `docs/progress.md`
 - GitHub Actions: `ci.yml`, `quality-gate.yml`, `docker-build.yml`
+
+---
+
+## Phase 2 — Knowledge Graph Extraction 🔄 (session 4 — entity-aware RAG)
+
+**Commit:** `feat(vault): entity-aware RAG — graph-augmented retrieval (retrieveWithGraph)`
+
+Extraction built the graph; this session finally *uses* it at query time. RAG could only return text
+chunks; now it can also hand back the knowledge-graph entities a query touches and the entities related
+to them — a concise structured map to sit alongside the passages.
+
+### What was done
+
+**Bounded graph projection (domain):**
+- `RelevantEntity` — a query-relevant view of a `KnowledgeEntity` with a `Relevance` (`MATCHED` — the
+  surface form appeared in the query; `RELATED` — a graph neighbour of a match).
+- `GraphContext` — the bounded projection: at most `MAX_ENTITIES` (20), deduped (matched beats related),
+  ordered matched-first then by salience, plus a prompt-ready summary
+  (`"Relevant entities: … ; related: …"`). `empty()` + `assemble(matched, related)`.
+- `EntityAwareRagContext` — composes the text `RagContext` with the `GraphContext`.
+
+**Graph-augmented retrieval (engine + port):**
+- `RagPipelinePort.retrieveWithGraph(query)` — a **default** method returning an empty graph, so a
+  graph-less pipeline still satisfies the port.
+- `DefaultRagPipelineService` gains an optional `EntityExtractor` + `KnowledgeGraphStore` (new
+  constructor; the text-only constructor delegates with nulls). `retrieveWithGraph` runs the normal
+  retrieval, extracts entities from the query text, resolves each via `findByName` (matched), expands
+  each match by one edge via `neighbours` (related), and assembles a `GraphContext`. **Best-effort**:
+  no extractor/graph or a thrown lookup yields an empty graph — plain RAG is never broken. All lookups
+  stay inside the query's `tenantId` + `collectionId` scope.
+
+**API (opt-in):**
+- `RagController` `POST /api/v1/rag/query` accepts `"includeGraph": true` → calls `retrieveWithGraph`
+  and adds a `graph` object (`summary` + `entities[]` with `name`/`type`/`mentionCount`/`relevance`).
+  Default and absent flag keep the exact prior response. Mirrors Memory's `includePeers` opt-in.
+
+**Tests — 131 unit tests green (was 116):**
+- Domain `GraphContextTest` (5): empty, matched-first + salience ordering, dedup matched-over-related,
+  `MAX_ENTITIES` cap, summary sections. Engine `DefaultRagPipelineServiceTest` (+4): graph-less → empty,
+  matched + neighbour expansion, no-match → empty, graph-failure best-effort. Api `RagControllerTest`
+  (3): graph omitted by default, graph included on request, 400 on missing query.
+- No new migration — entity-aware RAG reads the existing graph tables. `mvn -DskipITs verify` passes the
+  JaCoCo 80% gate.
+
+### Remaining Phase 2 (follow-up)
+- A **model-/LLM-based `EntityExtractor`** behind the same port (the heuristic is the offline default).
+- **Entity resolution / de-duplication** (merge surface-form variants of the same entity).
+- **Graph-store evaluation** (dedicated graph DB vs. the relational edge table).
 
 ---
 

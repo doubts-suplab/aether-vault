@@ -20,7 +20,7 @@
 
 **Capability owned (exclusively):** *Knowledge* — Document Indexing, Vector Search, Knowledge Graph, RAG Pipeline, Knowledge Freshness. Personal memory stays in Aether Core; shared team memory stays in Aether Memory. Vault owns **documents and the knowledge derived from them**, not memories.
 
-**Current status:** Phase 1 — Ingestion & Retrieval Engine ✅ complete. Phase 2 — Knowledge Graph Extraction 🔄 core complete: automatic entity + co-occurrence relation extraction during ingestion via a pluggable `EntityExtractor` (dependency-free heuristic default) and `GraphExtractionPort`, wired as best-effort augmentation to the ingest pipeline; Testcontainers ITs. Follow-up: entity-aware RAG, a model-/LLM-based extractor, entity resolution/de-dup, graph-store evaluation.
+**Current status:** Phase 1 — Ingestion & Retrieval Engine ✅ complete. Phase 2 — Knowledge Graph Extraction 🔄 core complete: automatic entity + co-occurrence relation extraction during ingestion via a pluggable `EntityExtractor` (dependency-free heuristic default) and `GraphExtractionPort`, wired as best-effort augmentation to the ingest pipeline; plus **entity-aware RAG** — `RagPipelinePort.retrieveWithGraph` recognises entities in the query, resolves them against the collection graph, expands to their neighbours, and returns a bounded `GraphContext` (matched + related entities + a prompt-ready summary) alongside the text `RagContext`, opt-in via `includeGraph` on `POST /rag/query` and best-effort (plain RAG is unaffected if the graph is absent or a lookup fails); Testcontainers ITs. Follow-up: a model-/LLM-based extractor, entity resolution/de-dup, graph-store evaluation.
 
 **One runnable application:**
 - `vault-api` — Knowledge Platform API (port 8084)
