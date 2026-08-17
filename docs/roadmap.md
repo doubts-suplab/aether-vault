@@ -53,7 +53,7 @@
 | NER-based entity extraction on ingest (pluggable `EntityExtractor`; dependency-free heuristic default) | ✅ |
 | Relation extraction between co-occurring entities (`co_occurs_with`, canonical, bounded, idempotent) | ✅ |
 | Extraction wired into the ingest pipeline as best-effort augmentation (`GraphExtractionPort`) | ✅ |
-| Graph-augmented retrieval (entity-aware RAG) | ⏳ (follow-up) |
+| Graph-augmented retrieval (entity-aware RAG) — `retrieveWithGraph` / `includeGraph`, bounded `GraphContext` (matched + neighbour entities + summary), best-effort | ✅ |
 | Model-/LLM-based entity extractor behind the `EntityExtractor` port | ⏳ (follow-up) |
 | Entity resolution / de-duplication (alias + fuzzy match) | ⏳ (follow-up) |
 | Graph-store evaluation — recursive CTE → Apache AGE → native graph DB, gated on traversal depth/latency once extraction produces a dense graph (see ADR-0008) | ⏳ (follow-up) |

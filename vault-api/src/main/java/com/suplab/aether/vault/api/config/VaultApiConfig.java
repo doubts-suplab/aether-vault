@@ -160,12 +160,16 @@ public class VaultApiConfig {
 
     /**
      * Creates the RAG pipeline. The embedding service is optional so retrieval degrades to
-     * zero-vector matching rather than failing when Ollama is disabled.
+     * zero-vector matching rather than failing when Ollama is disabled. The entity extractor and
+     * knowledge-graph store power entity-aware retrieval (best-effort — plain RAG is unaffected if
+     * they are absent or a graph lookup fails).
      */
     @Bean
     public RagPipelinePort ragPipelinePort(DocumentChunkStore chunkStore,
-                                           Optional<KnowledgeEmbeddingService> embeddingService) {
-        return new DefaultRagPipelineService(chunkStore, embeddingService);
+                                           Optional<KnowledgeEmbeddingService> embeddingService,
+                                           EntityExtractor entityExtractor,
+                                           KnowledgeGraphStore graphStore) {
+        return new DefaultRagPipelineService(chunkStore, embeddingService, entityExtractor, graphStore);
     }
 
     /**

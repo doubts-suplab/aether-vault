@@ -1,6 +1,8 @@
 package com.suplab.aether.vault.api.controller;
 
+import com.suplab.aether.vault.domain.GraphContext;
 import com.suplab.aether.vault.domain.RagContext;
+import com.suplab.aether.vault.domain.RelevantEntity;
 import com.suplab.aether.vault.domain.RetrievalQuery;
 import com.suplab.aether.vault.ports.RagPipelinePort;
 import org.slf4j.Logger;
@@ -11,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,9 +41,12 @@ public class RagController {
      * Executes a RAG retrieval.
      *
      * <p>Request body: {@code {"tenantId": "...", "collectionId": "...", "queryText": "...",
-     * "topK": 5}}. {@code topK} is clamped by the pipeline.</p>
+     * "topK": 5, "includeGraph": false}}. {@code topK} is clamped by the pipeline. When
+     * {@code includeGraph} is true the response gains a {@code graph} object — the knowledge-graph
+     * entities relevant to the query (matched + their neighbours) plus a prompt-ready summary.</p>
      *
-     * @return 200 OK with {@code query}, {@code chunks}, {@code context}; 400 on missing fields
+     * @return 200 OK with {@code query}, {@code chunks}, {@code context} (and {@code graph} when
+     *         requested); 400 on missing fields
      */
     @PostMapping("/query")
     public ResponseEntity<Object> query(@RequestBody Map<String, Object> body) {
@@ -57,7 +64,18 @@ public class RagController {
         }
 
         int topK = asInt(body.get("topK"), 5);
-        RagContext context = ragPipeline.retrieve(new RetrievalQuery(tenantId, collectionId, queryText, topK));
+        boolean includeGraph = asBool(body.get("includeGraph"), false);
+        var request = new RetrievalQuery(tenantId, collectionId, queryText, topK);
+
+        RagContext context;
+        GraphContext graph = null;
+        if (includeGraph) {
+            var enriched = ragPipeline.retrieveWithGraph(request);
+            context = enriched.retrieval();
+            graph = enriched.graph();
+        } else {
+            context = ragPipeline.retrieve(request);
+        }
 
         var chunks = context.chunks().stream()
                 .map(chunk -> Map.<String, Object>of(
@@ -69,16 +87,46 @@ public class RagController {
                         "score", chunk.score()))
                 .toList();
 
-        log.info("RAG query served tenantId={} collectionId={} topK={} chunks={}",
-                tenantId, collectionId, topK, chunks.size());
-        return ResponseEntity.ok(Map.of(
-                "query", context.query(),
-                "chunks", chunks,
-                "context", context.assembledContext()));
+        var response = new LinkedHashMap<String, Object>();
+        response.put("query", context.query());
+        response.put("chunks", chunks);
+        response.put("context", context.assembledContext());
+        if (graph != null) {
+            response.put("graph", graphView(graph));
+        }
+
+        log.info("RAG query served tenantId={} collectionId={} topK={} chunks={} graph={}",
+                tenantId, collectionId, topK, chunks.size(), includeGraph);
+        return ResponseEntity.ok(response);
+    }
+
+    private static Map<String, Object> graphView(GraphContext graph) {
+        List<Map<String, Object>> entities = graph.entities().stream()
+                .map(RagController::entityView)
+                .toList();
+        return Map.of("summary", graph.summary(), "entities", entities);
+    }
+
+    private static Map<String, Object> entityView(RelevantEntity entity) {
+        return Map.of(
+                "name", entity.name(),
+                "type", entity.type().name(),
+                "mentionCount", entity.mentionCount(),
+                "relevance", entity.relevance().name());
     }
 
     private static String asString(Object value) {
         return value != null ? value.toString() : null;
+    }
+
+    private static boolean asBool(Object value, boolean defaultValue) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value != null) {
+            return Boolean.parseBoolean(value.toString());
+        }
+        return defaultValue;
     }
 
     private static int asInt(Object value, int defaultValue) {

@@ -36,7 +36,7 @@ cd ../.. && mvn spring-boot:run -pl vault-api
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents/count` | Document + chunk counts |
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents/{id}` | Fetch a document |
 | `DELETE` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/documents/{id}` | Delete a document and its chunks |
-| `POST` | `/api/v1/rag/query` | Vector search + bounded context assembly for RAG |
+| `POST` | `/api/v1/rag/query` | Vector search + bounded context assembly for RAG; `"includeGraph": true` also returns a bounded knowledge-graph projection (entities the query matches + their neighbours + a summary) |
 | `POST` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/entities` | Create / reinforce a knowledge-graph entity (also populated automatically on ingest) |
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/entities` | List entities (most-mentioned first) |
 | `POST` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/entities/{id}/relations` | Relate two entities |

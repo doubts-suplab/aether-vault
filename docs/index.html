@@ -214,7 +214,7 @@
         <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents/from-source</code></td><td>Ingest from a source URI (connector, freshness-aware)</td></tr>
         <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents</code></td><td>List documents in a collection</td></tr>
         <tr><td><span class="method delete">DEL</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/documents/{id}</code></td><td>Delete a document and its chunks</td></tr>
-        <tr><td><span class="method post">POST</span></td><td><code>/api/v1/rag/query</code></td><td>Vector search + bounded context assembly</td></tr>
+        <tr><td><span class="method post">POST</span></td><td><code>/api/v1/rag/query</code></td><td>Vector search + bounded context assembly; <code>includeGraph</code> adds a knowledge-graph projection (entity-aware RAG)</td></tr>
         <tr><td><span class="method post">POST</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/entities</code></td><td>Create / reinforce a graph entity</td></tr>
         <tr><td><span class="method get">GET</span></td><td><code>/api/v1/tenants/{t}/collections/{c}/entities/{id}/neighbours</code></td><td>Traverse an entity's neighbours</td></tr>
       </tbody>
