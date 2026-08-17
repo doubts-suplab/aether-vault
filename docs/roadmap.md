@@ -54,9 +54,9 @@
 | Relation extraction between co-occurring entities (`co_occurs_with`, canonical, bounded, idempotent) | ✅ |
 | Extraction wired into the ingest pipeline as best-effort augmentation (`GraphExtractionPort`) | ✅ |
 | Graph-augmented retrieval (entity-aware RAG) — `retrieveWithGraph` / `includeGraph`, bounded `GraphContext` (matched + neighbour entities + summary), best-effort | ✅ |
-| Model-/LLM-based entity extractor behind the `EntityExtractor` port | ⏳ (follow-up) |
-| Entity resolution / de-duplication (alias + fuzzy match) | ⏳ (follow-up) |
-| Graph-store evaluation — recursive CTE → Apache AGE → native graph DB, gated on traversal depth/latency once extraction produces a dense graph (see ADR-0008) | ⏳ (follow-up) |
+| Model-/LLM-based entity extractor behind the `EntityExtractor` port — `OllamaEntityExtractor` (`extractor=llm`), heuristic fallback | ✅ |
+| Entity resolution / de-duplication — `NormalizingEntityResolver` via `ResolvingEntityExtractor` (applied at ingest + query) | ✅ |
+| Graph-store evaluation — relational vs. dedicated graph DB; **decision recorded in [ADR-001](decisions/ADR-001-graph-store-relational-vs-dedicated.md)** (stay relational, revisit at multi-hop scale) | ✅ |
 
 ---
 

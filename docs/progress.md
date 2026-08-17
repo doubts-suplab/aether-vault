@@ -5,7 +5,7 @@
 
 ---
 
-**Active Phase:** Phase 2 — Knowledge Graph Extraction 🔄 (core complete: automatic entity + co-occurrence extraction on ingest + entity-aware RAG; model-/LLM-extractor + entity resolution follow-up)
+**Active Phase:** Phase 2 — Knowledge Graph Extraction ✅ core complete (automatic entity + co-occurrence extraction on ingest, entity-aware RAG, selectable heuristic/LLM extractor, entity resolution/de-dup; graph-store choice recorded in ADR-001)
 
 | Phase | Name | Status | Sessions |
 |---|---|---|---|
@@ -72,6 +72,55 @@
 **Docs:**
 - `README.md`, `docs/index.html`, `docs/architecture.md`, `docs/roadmap.md`, `docs/progress.md`
 - GitHub Actions: `ci.yml`, `quality-gate.yml`, `docker-build.yml`
+
+---
+
+## Phase 2 — Knowledge Graph Extraction ✅ (session 5 — LLM extractor, entity resolution, graph-store ADR)
+
+**Commit:** `feat(vault): selectable LLM entity extractor + entity resolution/de-dup`
+
+Closes the three Phase 2 follow-ups: a smarter NER option, node de-duplication, and the graph-store
+decision. All offline-testable; the heuristic remains the standalone default.
+
+### What was done
+
+**Model-/LLM-based extractor (behind the same port):**
+- `OllamaEntityExtractor` (vault-engine) — prompts an LLM via Ollama `/api/generate` (JSON mode) for
+  `{name,type}` entities, parses the reply (object-with-`entities` or bare array), maps type synonyms
+  (`company`→ORGANISATION, `place`→LOCATION, …; unknown→OTHER), de-dupes and bounds. **Fail-safe**: any
+  transport failure, null/blank reply, or unparseable JSON degrades to the injected fallback (the
+  heuristic), so Vault keeps building a graph with no Ollama present — mirroring the embedding service.
+- Config-selected: `aether.vault.graph.extractor` = `heuristic` (default) | `llm`
+  (`aether.vault.graph.llm-model`, default `llama3`).
+
+**Entity resolution / de-duplication:**
+- `EntityResolver` port + `NormalizingEntityResolver` (vault-engine) — canonicalises a surface form
+  (collapse whitespace, strip possessive/edge punctuation, Title-case multi-token phrases, preserve a
+  single-token acronym) so `"Ada Lovelace"` / `"ada lovelace"` / `"Suplab's"` collapse to one node.
+- `ResolvingEntityExtractor` decorator wraps the base extractor and de-dupes canonical mentions.
+  Because ingest **and** entity-aware RAG share the one `entityExtractor` bean, resolution is applied
+  uniformly — a document's and a query's variant of the same entity resolve to the same node. Gated by
+  `aether.vault.graph.resolve-entities` (default on); `EntityResolver.NONE` is the identity.
+
+**Graph-store evaluation:**
+- **ADR-001** (`docs/decisions/`) — relational edge table vs. a dedicated graph DB. Decision: **stay
+  relational** (shallow access patterns — resolve/list/one-hop; single-store Postgres discipline;
+  transactional consistency; graph+vector co-queries), kept reversible behind the `KnowledgeGraphStore`
+  port, with explicit revisit triggers (multi-hop/pathfinding, pattern matching, analytics, edge-volume
+  SLOs).
+
+**Tests — 149 unit tests green (was 131):**
+- `OllamaEntityExtractorTest` (6): entities-object + type-synonym mapping, bare array + unknown→OTHER,
+  dedup, malformed→empty (not thrown), unreachable-Ollama→heuristic fallback, fallback-required guard.
+- `NormalizingEntityResolverTest` (6): case collapse, possessive/punctuation strip, whitespace, acronym
+  preservation, idempotency, blank-canonical fallback. `ResolvingEntityExtractorTest` (3): variant
+  dedup, distinct-type keep, identity resolver.
+- No new migration — extractor choice and resolution are write-time concerns over existing tables.
+  `mvn -DskipITs verify` passes the JaCoCo 80% gate.
+
+### Phase 2 complete
+All Phase 2 deliverables and follow-ups are done: extraction on ingest, entity-aware RAG, selectable
+heuristic/LLM extractor, entity resolution/de-dup, and the graph-store decision (ADR-001).
 
 ---
 
