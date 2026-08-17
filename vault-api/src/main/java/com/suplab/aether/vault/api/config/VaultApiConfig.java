@@ -5,6 +5,9 @@ import com.suplab.aether.vault.engine.freshness.DocumentFreshnessService;
 import com.suplab.aether.vault.engine.graph.DefaultKnowledgeGraphExtractionService;
 import com.suplab.aether.vault.engine.graph.HeuristicEntityExtractor;
 import com.suplab.aether.vault.engine.graph.JdbcKnowledgeGraphStore;
+import com.suplab.aether.vault.engine.graph.NormalizingEntityResolver;
+import com.suplab.aether.vault.engine.graph.OllamaEntityExtractor;
+import com.suplab.aether.vault.engine.graph.ResolvingEntityExtractor;
 import com.suplab.aether.vault.engine.ingestion.DefaultDocumentIngestionService;
 import com.suplab.aether.vault.engine.ingestion.DefaultSourceIngestionService;
 import com.suplab.aether.vault.engine.ingestion.TextChunker;
@@ -79,18 +82,35 @@ public class VaultApiConfig {
     }
 
     /**
-     * Creates the entity extractor used during ingestion (Phase 2 NER).
+     * Creates the entity extractor used during ingestion and by entity-aware RAG (Phase 2 NER).
      *
-     * <p>Defaults to the dependency-free {@link HeuristicEntityExtractor}, so Vault extracts a graph
-     * with no NLP runtime on the classpath. A model-/LLM-based extractor implementing
-     * {@link EntityExtractor} can replace this behind the same port.</p>
+     * <p>The base extractor is selected by {@code aether.vault.graph.extractor}: {@code heuristic}
+     * (default — the dependency-free {@link HeuristicEntityExtractor}, so Vault extracts a graph with
+     * no NLP runtime present) or {@code llm} (an {@link OllamaEntityExtractor} that calls Ollama and
+     * <em>falls back to the heuristic</em> on any failure). When
+     * {@code aether.vault.graph.resolve-entities} is true (default) the base is wrapped in a
+     * {@link ResolvingEntityExtractor} + {@link NormalizingEntityResolver} so surface-form variants of
+     * the same entity collapse to one node — applied uniformly at ingest and at query time because both
+     * share this bean.</p>
      *
      * @param maxEntitiesPerChunk cap on distinct entities returned from a single chunk
+     * @param kind                {@code heuristic} or {@code llm}
+     * @param resolve             whether to canonicalise + de-duplicate mentions
+     * @param ollamaBaseUrl       Ollama endpoint for the {@code llm} extractor
+     * @param llmModel            the model name for the {@code llm} extractor
      */
     @Bean
     public EntityExtractor entityExtractor(
-            @Value("${aether.vault.graph.max-entities-per-chunk:32}") int maxEntitiesPerChunk) {
-        return new HeuristicEntityExtractor(maxEntitiesPerChunk);
+            @Value("${aether.vault.graph.max-entities-per-chunk:32}") int maxEntitiesPerChunk,
+            @Value("${aether.vault.graph.extractor:heuristic}") String kind,
+            @Value("${aether.vault.graph.resolve-entities:true}") boolean resolve,
+            @Value("${aether.vault.ollama.base-url:http://localhost:11434}") String ollamaBaseUrl,
+            @Value("${aether.vault.graph.llm-model:llama3}") String llmModel) {
+        var heuristic = new HeuristicEntityExtractor(maxEntitiesPerChunk);
+        EntityExtractor base = "llm".equalsIgnoreCase(kind)
+                ? new OllamaEntityExtractor(ollamaBaseUrl, llmModel, heuristic)
+                : heuristic;
+        return resolve ? new ResolvingEntityExtractor(base, new NormalizingEntityResolver()) : base;
     }
 
     /**

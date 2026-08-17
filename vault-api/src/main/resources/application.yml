@@ -57,3 +57,13 @@ aether:
       enabled: ${VAULT_FRESHNESS_ENABLED:true}
       reindex-interval-days: ${VAULT_REINDEX_INTERVAL_DAYS:30}
       cron: ${VAULT_FRESHNESS_CRON:0 0 4 * * *}
+    graph:
+      extraction:
+        enabled: ${VAULT_GRAPH_EXTRACTION_ENABLED:true}
+      # NER strategy: 'heuristic' (dependency-free default) or 'llm' (Ollama, falls back to heuristic).
+      extractor: ${VAULT_GRAPH_EXTRACTOR:heuristic}
+      llm-model: ${VAULT_GRAPH_LLM_MODEL:llama3}
+      # Canonicalise + de-duplicate surface-form variants of the same entity (applied at ingest + query).
+      resolve-entities: ${VAULT_GRAPH_RESOLVE_ENTITIES:true}
+      max-entities-per-chunk: ${VAULT_GRAPH_MAX_ENTITIES_PER_CHUNK:32}
+      max-entities-for-relations: ${VAULT_GRAPH_MAX_ENTITIES_FOR_RELATIONS:8}
