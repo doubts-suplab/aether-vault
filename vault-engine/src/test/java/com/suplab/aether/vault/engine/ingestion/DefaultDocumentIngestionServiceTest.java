@@ -47,6 +47,11 @@ class DefaultDocumentIngestionServiceTest {
         public long countByCollection(KnowledgeScope scope) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public int deleteByCollection(KnowledgeScope scope) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     /** Captures the last saved document. */
@@ -80,6 +85,11 @@ class DefaultDocumentIngestionServiceTest {
 
         @Override
         public void delete(KnowledgeScope scope, UUID documentId) {
+        }
+
+        @Override
+        public int deleteByCollection(KnowledgeScope scope) {
+            return 0;
         }
     }
 

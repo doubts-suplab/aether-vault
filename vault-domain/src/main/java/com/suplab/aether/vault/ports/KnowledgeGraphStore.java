@@ -65,4 +65,14 @@ public interface KnowledgeGraphStore {
      * @return neighbouring entities (may be empty)
      */
     List<KnowledgeEntity> neighbours(KnowledgeScope scope, UUID entityId, int limit);
+
+    /**
+     * Deletes every entity in a collection — the knowledge-graph half of a right-to-erasure request.
+     * Their relations are removed by cascade. Scoped by tenant + collection so there is no
+     * cross-collection deletion path.
+     *
+     * @param scope the owning tenant + collection
+     * @return the number of entities deleted
+     */
+    int deleteByCollection(KnowledgeScope scope);
 }

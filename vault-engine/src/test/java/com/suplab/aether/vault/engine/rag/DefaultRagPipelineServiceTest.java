@@ -53,6 +53,11 @@ class DefaultRagPipelineServiceTest {
         public long countByCollection(KnowledgeScope scope) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public int deleteByCollection(KnowledgeScope scope) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static RetrievedChunk chunk(String content) {
@@ -90,6 +95,9 @@ class DefaultRagPipelineServiceTest {
         }
         @Override public List<KnowledgeEntity> neighbours(KnowledgeScope scope, UUID entityId, int limit) {
             return edges.getOrDefault(entityId, List.of()).stream().limit(limit).toList();
+        }
+        @Override public int deleteByCollection(KnowledgeScope scope) {
+            throw new UnsupportedOperationException();
         }
     }
 

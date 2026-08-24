@@ -148,6 +148,21 @@ public class JdbcKnowledgeDocumentStore implements KnowledgeDocumentStore {
                 deleted, documentId, scope.tenantId(), scope.collectionId());
     }
 
+    @Override
+    public int deleteByCollection(KnowledgeScope scope) {
+        var sql = """
+                DELETE FROM knowledge_documents
+                WHERE tenant_id = :tenantId AND collection_id = :collectionId
+                """;
+        var params = new MapSqlParameterSource()
+                .addValue("tenantId", scope.tenantId())
+                .addValue("collectionId", scope.collectionId());
+        int deleted = jdbc.update(sql, params);
+        log.info("Erased {} document record(s) tenantId={} collectionId={}",
+                deleted, scope.tenantId(), scope.collectionId());
+        return deleted;
+    }
+
     private KnowledgeDocument mapRow(ResultSet rs, int row) throws SQLException {
         Timestamp indexedAt = rs.getTimestamp("indexed_at");
         return new KnowledgeDocument(

@@ -10,10 +10,12 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
  * Set-based JDBC implementation of {@link KnowledgeFreshnessPort}.
  *
  * <p>The sweep runs as a single {@code UPDATE}: every {@code INDEXED} document whose
- * {@code indexed_at} is older than the configured re-index interval is transitioned to
- * {@code STALE}. No per-row round trips, so a sweep over a large corpus stays cheap. Freshness
- * never deletes — sub-interval documents keep their chunks searchable until a re-indexing job
- * refreshes them.</p>
+ * {@code indexed_at} is older than its re-index interval is transitioned to {@code STALE}. The
+ * interval is per-collection — a collection's {@code collection_freshness_policy} override is used
+ * when present, otherwise the configured global default (via a correlated {@code COALESCE}), so a
+ * fast-moving collection can be re-indexed weekly while a stable archive ages for a year. No per-row
+ * round trips, so a sweep over a large corpus stays cheap. Freshness never deletes — sub-interval
+ * documents keep their chunks searchable until a re-indexing job refreshes them.</p>
  */
 public class DocumentFreshnessService implements KnowledgeFreshnessPort {
 
@@ -42,12 +44,17 @@ public class DocumentFreshnessService implements KnowledgeFreshnessPort {
     }
 
     private long markStale() {
+        // Per-collection interval: use the collection's policy override when present, else the global
+        // default. The correlated subquery keeps the sweep a single set-based UPDATE.
         var sql = """
-                UPDATE knowledge_documents
+                UPDATE knowledge_documents d
                 SET status = 'STALE', updated_at = NOW()
-                WHERE status = 'INDEXED'
-                  AND indexed_at IS NOT NULL
-                  AND indexed_at < NOW() - make_interval(days => :reindexIntervalDays)
+                WHERE d.status = 'INDEXED'
+                  AND d.indexed_at IS NOT NULL
+                  AND d.indexed_at < NOW() - make_interval(days => COALESCE(
+                        (SELECT p.reindex_interval_days FROM collection_freshness_policy p
+                         WHERE p.tenant_id = d.tenant_id AND p.collection_id = d.collection_id),
+                        :reindexIntervalDays))
                 """;
         var params = new MapSqlParameterSource("reindexIntervalDays", reindexIntervalDays);
         return jdbc.update(sql, params);

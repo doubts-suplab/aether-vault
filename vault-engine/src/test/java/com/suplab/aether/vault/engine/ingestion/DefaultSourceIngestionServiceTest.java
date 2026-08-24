@@ -49,6 +49,7 @@ class DefaultSourceIngestionServiceTest {
         @Override public List<KnowledgeDocument> findByCollection(KnowledgeScope s, int limit) { return List.of(); }
         @Override public long countByCollection(KnowledgeScope s) { return 0; }
         @Override public void delete(KnowledgeScope s, UUID id) { }
+        @Override public int deleteByCollection(KnowledgeScope s) { return 0; }
     }
 
     /** Ingestion port that records whether it ran and reports a fixed chunk count. */

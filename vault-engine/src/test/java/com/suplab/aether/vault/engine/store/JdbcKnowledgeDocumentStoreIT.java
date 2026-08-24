@@ -114,4 +114,20 @@ class JdbcKnowledgeDocumentStoreIT {
 
         assertThat(store.findById(scope, doc.id())).isEmpty();
     }
+
+    @Test
+    void deleteByCollection_erasesAllDocumentsInScopeOnly() {
+        var scope = uniqueScope();
+        var otherScope = KnowledgeScope.of(scope.tenantId(), scope.collectionId() + "-b");
+        store.save(KnowledgeDocument.create(scope, "uri1", "t1", "text/plain", "s1"));
+        store.save(KnowledgeDocument.create(scope, "uri2", "t2", "text/plain", "s2"));
+        store.save(KnowledgeDocument.create(otherScope, "uri3", "t3", "text/plain", "s3"));
+
+        int erased = store.deleteByCollection(scope);
+
+        assertThat(erased).isEqualTo(2);
+        assertThat(store.countByCollection(scope)).isZero();
+        // a different collection is untouched
+        assertThat(store.countByCollection(otherScope)).isEqualTo(1);
+    }
 }

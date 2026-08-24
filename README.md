@@ -41,6 +41,8 @@ cd ../.. && mvn spring-boot:run -pl vault-api
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/entities` | List entities (most-mentioned first) |
 | `POST` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/entities/{id}/relations` | Relate two entities |
 | `GET` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/entities/{id}/neighbours` | Traverse an entity's neighbours |
+| `GET`/`PUT` | `/api/v1/tenants/{tenantId}/collections/{collectionId}/freshness-policy` | Per-collection re-index interval + auto-reingest opt-in (GET returns the default when none is set) |
+| `DELETE` | `/api/v1/tenants/{tenantId}/collections/{collectionId}` | Right-to-erasure — erase a collection's documents, chunks, and graph (GDPR Art. 17) |
 | `GET` | `/actuator/health` | Liveness + readiness probes |
 
 ## Knowledge Model
@@ -74,6 +76,12 @@ Chunk token counts (for context budgeting) come from a pluggable `TokenCounter` 
 ### Knowledge Freshness
 
 Indexed knowledge ages. A scheduled sweep (default 04:00 daily) flags every `INDEXED` document whose last index is older than the re-index interval (default 30 days) as `STALE`, so a re-indexing job knows what to refresh. Existing chunks stay searchable until they are re-ingested — freshness **marks, never deletes**.
+
+The re-index interval is **per-collection**: `PUT …/freshness-policy` with `{"reindexIntervalDays": 7, "autoReingest": true}` overrides the global default for one collection (a fast-moving handbook weekly, a stable archive yearly). The sweep applies each collection's override, falling back to the global default when none is set.
+
+### Governance — right to erasure (GDPR Art. 17)
+
+A whole collection's derived knowledge can be erased on request: `DELETE …/collections/{collectionId}` removes the collection's documents, embedded chunks, and knowledge-graph entities (relations cascade) in one governed, tenant-scoped, idempotent operation, returning the counts removed. This is Vault's only bulk-delete path — freshness only marks.
 
 ## Ecosystem
 
@@ -115,6 +123,6 @@ Aether Vault owns the **Knowledge** capability exclusively. Personal memory stay
 | `VAULT_SOURCE_S3_MAX_BYTES` | `8388608` | Max object size for `s3:` sources (8 MiB) |
 | `VAULT_TOKENIZER` | `bpe` | Chunk token counter: `bpe` (real tokenizer) or `heuristic` |
 | `VAULT_FRESHNESS_ENABLED` | `true` | Toggle the scheduled freshness sweep |
-| `VAULT_REINDEX_INTERVAL_DAYS` | `30` | Age beyond which an indexed document is flagged stale |
+| `VAULT_REINDEX_INTERVAL_DAYS` | `30` | Global fallback age beyond which an indexed document is flagged stale (a per-collection `freshness-policy` override wins when set) |
 | `VAULT_FRESHNESS_CRON` | `0 0 4 * * *` | Freshness sweep schedule |
 | `SERVER_PORT` | `8084` | HTTP port |
