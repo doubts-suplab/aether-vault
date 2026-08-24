@@ -75,7 +75,9 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `SourceIngestionPort` | `DefaultSourceIngestionService` | Fetch → checksum → skip-if-unchanged → (re-)index from a source URI |
 | `TokenCounter` | `JtokkitTokenCounter` (default), `HeuristicTokenCounter` | Count chunk tokens for context budgeting; tokenizer is replaceable |
 | `RagPipelinePort` | `DefaultRagPipelineService` | Embed query → vector search → bounded context; `retrieveWithGraph` adds a bounded knowledge-graph projection (entity-aware RAG, best-effort) |
-| `KnowledgeFreshnessPort` | `DocumentFreshnessService` | Set-based re-index staleness sweep |
+| `KnowledgeFreshnessPort` | `DocumentFreshnessService` | Set-based re-index staleness sweep; applies each collection's interval override (`COALESCE` with the global default) |
+| `FreshnessPolicyStore` | `JdbcFreshnessPolicyStore` | Per-collection freshness override — re-index interval + auto-reingest opt-in (upsert by tenant + collection) |
+| `KnowledgeErasurePort` | `DefaultKnowledgeErasureService` | Right-to-erasure (GDPR Art. 17) — erases a collection's chunks, documents, and graph entities (relations cascade); idempotent, reports counts |
 
 Connector selection goes through `SourceConnectorRegistry` — **default-deny**: a URI no registered
 connector supports is never fetched. Each connector enforces its own safety limits (the filesystem
@@ -99,6 +101,7 @@ exact downstream-model tokenizer can be swapped in without touching ingestion or
 | `V003` | `document_chunks.embedding vector(384)` | IVFFlat cosine index (`lists=100`) |
 | `V004` | `knowledge_entities`, `entity_relations` | Graph node/edge tables; entity unique on `(tenant_id, collection_id, name, entity_type)`; relations keyed on `(source, target, relation_type)` |
 | `V005` | index `idx_knowledge_documents_source_uri` | `(tenant_id, collection_id, source_uri)` — backs `findBySourceUri` for freshness-aware source re-ingestion |
+| `V006` | `collection_freshness_policy` | Per-collection re-index interval + `auto_reingest` opt-in; PK `(tenant_id, collection_id)`; partial index on `auto_reingest = TRUE` |
 
 All embeddings are 384-dim (all-MiniLM-L6-v2), consistent across the ecosystem.
 
@@ -131,10 +134,14 @@ The knowledge graph is persisted as relational adjacency tables rather than a na
 3. `GET …/entities/{id}/neighbours` traverses edges from either direction, scoped.
 4. **Automatic extraction (Phase 2):** at the end of ingestion, `DefaultKnowledgeGraphExtractionService` runs the pluggable `EntityExtractor` over each chunk, upserts every mention (bumping `mention_count`), and records a `co_occurs_with` relation between each distinct pair of entities co-occurring in a chunk. Pairing is bounded to the first *N* entities per chunk (default 8) to avoid a quadratic edge blow-up; edges are written in a canonical direction (smaller UUID → larger) so a symmetric co-occurrence is stored once, and both upsert and relate are idempotent, so re-ingesting a document is safe. The default extractor is dependency-free (`HeuristicEntityExtractor`); an `OllamaEntityExtractor` (config `aether.vault.graph.extractor=llm`) is a drop-in behind the `EntityExtractor` port and **falls back to the heuristic** on any failure. Every extractor is wrapped by a `ResolvingEntityExtractor` (config `resolve-entities`, default on) applying a `NormalizingEntityResolver` so surface-form variants of an entity (`"Ada Lovelace"` / `"ada lovelace"` / `"Suplab's"`) collapse to one node — at ingest and at query time alike, since both share the one extractor bean. The relational graph store is retained deliberately (see [ADR-001](decisions/ADR-001-graph-store-relational-vs-dedicated.md)).
 
-### 5.4 Freshness (set-based)
+### 5.4 Freshness (set-based, per-collection interval)
 1. Scheduler (`@Scheduled`, default 04:00) → `KnowledgeFreshnessPort.sweep`.
-2. Single `UPDATE`: `INDEXED` documents with `indexed_at < NOW() - reindex_interval` become `STALE`.
+2. Single `UPDATE`: `INDEXED` documents with `indexed_at < NOW() - interval` become `STALE`, where `interval` is the collection's `collection_freshness_policy` override when present (correlated `COALESCE`), else the global default. `GET/PUT .../freshness-policy` manages the override.
 3. Micrometer: `aether.vault.freshness.stale` counter, `aether.vault.documents.indexed` gauge.
+
+### 5.5 Right to erasure (GDPR Art. 17)
+1. `DELETE /api/v1/tenants/{tenantId}/collections/{collectionId}` → `KnowledgeErasurePort.eraseCollection`.
+2. Deletes the collection's chunks, then document records, then knowledge-graph entities (relations cascade with their entities), and returns the counts removed. Tenant + collection-scoped, idempotent (an empty collection → zero counts). This is Vault's only bulk-delete path; the freshness sweep still only *marks*.
 
 ---
 

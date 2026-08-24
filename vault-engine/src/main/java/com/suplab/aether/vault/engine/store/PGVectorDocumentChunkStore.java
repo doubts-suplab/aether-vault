@@ -111,6 +111,21 @@ public class PGVectorDocumentChunkStore implements DocumentChunkStore {
         return count != null ? count : 0L;
     }
 
+    @Override
+    public int deleteByCollection(KnowledgeScope scope) {
+        var sql = """
+                DELETE FROM document_chunks
+                WHERE tenant_id = :tenantId AND collection_id = :collectionId
+                """;
+        var params = new MapSqlParameterSource()
+                .addValue("tenantId", scope.tenantId())
+                .addValue("collectionId", scope.collectionId());
+        int deleted = jdbc.update(sql, params);
+        log.info("Erased {} chunk(s) tenantId={} collectionId={}",
+                deleted, scope.tenantId(), scope.collectionId());
+        return deleted;
+    }
+
     private RetrievedChunk mapRetrieved(ResultSet rs, int row) throws SQLException {
         return new RetrievedChunk(
                 UUID.fromString(rs.getString("document_id")),

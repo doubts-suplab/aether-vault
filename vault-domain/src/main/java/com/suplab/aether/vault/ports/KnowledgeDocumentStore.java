@@ -73,4 +73,14 @@ public interface KnowledgeDocumentStore {
      * @param documentId the document to delete
      */
     void delete(KnowledgeScope scope, UUID documentId);
+
+    /**
+     * Deletes every document record in a collection — the document half of a right-to-erasure
+     * request. Scoped by tenant + collection so there is no cross-collection deletion path. Chunk and
+     * graph cleanup are the caller's responsibility.
+     *
+     * @param scope the owning tenant + collection
+     * @return the number of document records deleted
+     */
+    int deleteByCollection(KnowledgeScope scope);
 }

@@ -1,7 +1,9 @@
 package com.suplab.aether.vault.api.config;
 
 import com.suplab.aether.vault.engine.embedding.KnowledgeEmbeddingService;
+import com.suplab.aether.vault.engine.erasure.DefaultKnowledgeErasureService;
 import com.suplab.aether.vault.engine.freshness.DocumentFreshnessService;
+import com.suplab.aether.vault.engine.freshness.JdbcFreshnessPolicyStore;
 import com.suplab.aether.vault.engine.graph.DefaultKnowledgeGraphExtractionService;
 import com.suplab.aether.vault.engine.graph.HeuristicEntityExtractor;
 import com.suplab.aether.vault.engine.graph.JdbcKnowledgeGraphStore;
@@ -24,8 +26,10 @@ import com.suplab.aether.vault.ports.DocumentChunkStore;
 import com.suplab.aether.vault.ports.DocumentIngestionPort;
 import com.suplab.aether.vault.ports.DocumentSourceConnector;
 import com.suplab.aether.vault.ports.EntityExtractor;
+import com.suplab.aether.vault.ports.FreshnessPolicyStore;
 import com.suplab.aether.vault.ports.GraphExtractionPort;
 import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
+import com.suplab.aether.vault.ports.KnowledgeErasurePort;
 import com.suplab.aether.vault.ports.KnowledgeFreshnessPort;
 import com.suplab.aether.vault.ports.KnowledgeGraphStore;
 import com.suplab.aether.vault.ports.RagPipelinePort;
@@ -289,15 +293,36 @@ public class VaultApiConfig {
     }
 
     /**
-     * Creates the knowledge-freshness sweep service.
+     * Creates the knowledge-freshness sweep service. The sweep applies each collection's
+     * {@link FreshnessPolicyStore} interval override when present, falling back to this global default.
      *
-     * @param reindexIntervalDays age beyond which an INDEXED document is flagged STALE (default 30)
+     * @param reindexIntervalDays global fallback age beyond which an INDEXED document is flagged STALE
+     *                            (default 30) — used for collections with no stored policy
      */
     @Bean
     public KnowledgeFreshnessPort knowledgeFreshnessPort(
             NamedParameterJdbcTemplate jdbc,
             @Value("${aether.vault.freshness.reindex-interval-days:30}") int reindexIntervalDays) {
         return new DocumentFreshnessService(jdbc, reindexIntervalDays);
+    }
+
+    /**
+     * Creates the per-collection freshness-policy store (re-index interval + auto-reingest override).
+     */
+    @Bean
+    public FreshnessPolicyStore freshnessPolicyStore(NamedParameterJdbcTemplate jdbc) {
+        return new JdbcFreshnessPolicyStore(jdbc);
+    }
+
+    /**
+     * Creates the knowledge-collection erasure service — right-to-erasure (GDPR Art. 17) across a
+     * collection's documents, chunks, and knowledge-graph entities.
+     */
+    @Bean
+    public KnowledgeErasurePort knowledgeErasurePort(KnowledgeDocumentStore documentStore,
+                                                     DocumentChunkStore chunkStore,
+                                                     KnowledgeGraphStore graphStore) {
+        return new DefaultKnowledgeErasureService(documentStore, chunkStore, graphStore);
     }
 
     /**

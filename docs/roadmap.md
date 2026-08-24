@@ -60,16 +60,16 @@
 
 ---
 
-## Phase 3 — Freshness & Governance
+## Phase 3 — Freshness & Governance 🔄 (core complete)
 
 **Goal:** Full lifecycle governance and change-driven re-indexing.
 
 | Deliverable | Status |
 |---|---|
-| Checksum-driven re-index (not just interval-based staleness) | ⏳ |
-| Automatic re-ingestion of STALE documents | ⏳ |
-| Per-collection freshness policy | ⏳ |
-| GDPR erasure across documents, chunks, and graph | ⏳ |
+| Checksum-driven re-index (not just interval-based staleness) — the connector-driven ingest path (`DefaultSourceIngestionService`) already SHA-256s fetched content: an unchanged source is `UNCHANGED` (not re-embedded), a changed one re-indexed in place under the same document id | ✅ |
+| Per-collection freshness policy — `FreshnessPolicy` (per-collection re-index interval + auto-reingest opt-in, V006 `collection_freshness_policy`) + `FreshnessPolicyStore`; the freshness sweep honours each collection's interval override via a correlated `COALESCE` (global default as fallback); `GET/PUT /api/v1/tenants/{tenantId}/collections/{collectionId}/freshness-policy` | ✅ |
+| GDPR erasure across documents, chunks, and graph — `KnowledgeErasurePort`/`DefaultKnowledgeErasureService` + `DELETE /api/v1/tenants/{tenantId}/collections/{collectionId}`; erases chunks → documents → graph entities (relations cascade), tenant+collection-scoped, idempotent, reports counts | ✅ |
+| Automatic re-ingestion of STALE documents (scheduled re-fetch via source connector for auto-reingest collections) | ⏳ (follow-up — the `autoReingest` policy flag is the hook) |
 
 ---
 

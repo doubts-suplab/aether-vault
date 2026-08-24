@@ -5,17 +5,57 @@
 
 ---
 
-**Active Phase:** Phase 2 — Knowledge Graph Extraction ✅ core complete (automatic entity + co-occurrence extraction on ingest, entity-aware RAG, selectable heuristic/LLM extractor, entity resolution/de-dup; graph-store choice recorded in ADR-001)
+**Active Phase:** Phase 3 — Freshness & Governance 🔄 core complete (per-collection freshness policy + GDPR collection erasure; checksum-driven re-index already in the ingest path; auto-reingestion follow-up)
 
 | Phase | Name | Status | Sessions |
 |---|---|---|---|
 | 0 | Scaffold | ✅ Complete | 1 |
 | 1 | Ingestion & Retrieval Engine | ✅ Complete | 2 |
 | 2 | Knowledge Graph Extraction | 🔄 Core complete (extraction on ingest) | 3 |
-| 3 | Freshness & Governance | ⏳ Planned | — |
+| 3 | Freshness & Governance | 🔄 Core complete (per-collection freshness policy + GDPR erasure; auto-reingest pending) | 4 |
 | 4 | Kubernetes + Helm | ⏳ Planned | — |
 
 ---
+
+## Phase 3 — Freshness & Governance 🔄 (session 4 — per-collection freshness policy + GDPR collection erasure)
+
+**Commit:** `feat(vault): per-collection freshness policy + GDPR collection erasure (V006)`
+
+Phase 2 built the knowledge graph. Phase 3 governs the lifecycle: collections tune their own freshness,
+and a collection's derived knowledge can be erased on request.
+
+### What was done
+
+**Per-collection freshness policy:**
+- `FreshnessPolicy` domain record (per-collection `reindexIntervalDays` + `autoReingest` opt-in) +
+  `FreshnessPolicyStore` port + `JdbcFreshnessPolicyStore` (upsert on tenant+collection) + V006
+  migration `collection_freshness_policy`.
+- `DocumentFreshnessService` now applies each collection's interval override via a correlated
+  `COALESCE` subquery (global default as fallback) — still one set-based `UPDATE`, no per-row round
+  trips. `GET/PUT /api/v1/tenants/{tenantId}/collections/{collectionId}/freshness-policy`.
+
+**GDPR collection erasure (right to erasure, Art. 17):**
+- `KnowledgeErasureResult` + `KnowledgeErasurePort`; `DefaultKnowledgeErasureService` erases a
+  collection's chunks → documents → graph entities (relations cascade with their entities), reports
+  the counts, idempotent. New store deletes: `DocumentChunkStore.deleteByCollection`,
+  `KnowledgeDocumentStore.deleteByCollection`, `KnowledgeGraphStore.deleteByCollection` (JDBC).
+- `DELETE /api/v1/tenants/{tenantId}/collections/{collectionId}` — 200 with counts.
+
+**Checksum-driven re-index** was already delivered by the connector-driven ingest path
+(`DefaultSourceIngestionService`): an unchanged source is `UNCHANGED` (skipped), a changed one
+re-indexed in place. **Auto re-ingestion of stale documents** remains the Phase 3 follow-up; the
+policy's `autoReingest` flag (and `FreshnessPolicyStore.findAutoReingestScopes`) is the hook.
+
+### Constraints upheld
+- Every new query is scoped by `tenant_id` + `collection_id` — no cross-collection read or delete path.
+- Freshness still marks, never deletes; erasure is the only delete path and is explicit + auditable.
+- Explicit column lists, parameterized queries throughout.
+
+### Verification
+- `mvn -DskipITs verify` green with the JaCoCo 80% gate; unit tests cover the policy domain/store/
+  controller, the erasure service (counts, idempotent-empty, scope isolation), and the erasure
+  controller. New Testcontainers ITs cover the JDBC policy store, per-collection freshness sweep, and
+  `deleteByCollection`.
 
 ## Phase 0 — Scaffold ✅
 

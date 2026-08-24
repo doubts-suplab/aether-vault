@@ -153,6 +153,23 @@ public class JdbcKnowledgeGraphStore implements KnowledgeGraphStore {
         return jdbc.query(sql, params, this::mapEntity);
     }
 
+    @Override
+    public int deleteByCollection(KnowledgeScope scope) {
+        // Deleting the entities cascades to entity_relations (FK ON DELETE CASCADE), so no separate
+        // relation delete is needed — the whole collection subgraph is removed.
+        var sql = """
+                DELETE FROM knowledge_entities
+                WHERE tenant_id = :tenantId AND collection_id = :collectionId
+                """;
+        var params = new MapSqlParameterSource()
+                .addValue("tenantId", scope.tenantId())
+                .addValue("collectionId", scope.collectionId());
+        int deleted = jdbc.update(sql, params);
+        log.info("Erased {} knowledge-graph entit(y/ies) tenantId={} collectionId={}",
+                deleted, scope.tenantId(), scope.collectionId());
+        return deleted;
+    }
+
     private KnowledgeEntity mapEntity(ResultSet rs, int row) throws SQLException {
         return new KnowledgeEntity(
                 UUID.fromString(rs.getString("id")),

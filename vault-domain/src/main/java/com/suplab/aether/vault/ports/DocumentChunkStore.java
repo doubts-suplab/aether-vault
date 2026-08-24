@@ -54,4 +54,13 @@ public interface DocumentChunkStore {
      * @return non-negative chunk count
      */
     long countByCollection(KnowledgeScope scope);
+
+    /**
+     * Deletes every chunk in a collection — the chunk half of a right-to-erasure request. Scoped by
+     * tenant + collection so there is no cross-collection deletion path.
+     *
+     * @param scope the owning tenant + collection
+     * @return the number of chunks deleted
+     */
+    int deleteByCollection(KnowledgeScope scope);
 }
