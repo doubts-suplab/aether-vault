@@ -2,6 +2,7 @@ package com.suplab.aether.vault.api.config;
 
 import com.suplab.aether.vault.engine.embedding.KnowledgeEmbeddingService;
 import com.suplab.aether.vault.engine.erasure.DefaultKnowledgeErasureService;
+import com.suplab.aether.vault.engine.freshness.DefaultStaleReingestionService;
 import com.suplab.aether.vault.engine.freshness.DocumentFreshnessService;
 import com.suplab.aether.vault.engine.freshness.JdbcFreshnessPolicyStore;
 import com.suplab.aether.vault.engine.graph.DefaultKnowledgeGraphExtractionService;
@@ -32,6 +33,7 @@ import com.suplab.aether.vault.ports.KnowledgeDocumentStore;
 import com.suplab.aether.vault.ports.KnowledgeErasurePort;
 import com.suplab.aether.vault.ports.KnowledgeFreshnessPort;
 import com.suplab.aether.vault.ports.KnowledgeGraphStore;
+import com.suplab.aether.vault.ports.StaleReingestionPort;
 import com.suplab.aether.vault.ports.RagPipelinePort;
 import com.suplab.aether.vault.ports.SourceIngestionPort;
 import com.suplab.aether.vault.ports.TokenCounter;
@@ -312,6 +314,22 @@ public class VaultApiConfig {
     @Bean
     public FreshnessPolicyStore freshnessPolicyStore(NamedParameterJdbcTemplate jdbc) {
         return new JdbcFreshnessPolicyStore(jdbc);
+    }
+
+    /**
+     * Creates the auto-reingestion service — refreshes {@code STALE} documents in collections that
+     * opted into {@code autoReingest} through their source connector. Present only when a source
+     * connector is enabled (a {@link SourceIngestionPort} exists); otherwise {@code null} (no bean),
+     * so the reingestion scheduler no-ops and Vault runs unchanged without connectors.
+     */
+    @Bean
+    public StaleReingestionPort staleReingestionPort(FreshnessPolicyStore policyStore,
+                                                     KnowledgeDocumentStore documentStore,
+                                                     Optional<SourceIngestionPort> sourceIngestion) {
+        return sourceIngestion
+                .map(si -> (StaleReingestionPort)
+                        new DefaultStaleReingestionService(policyStore, documentStore, si))
+                .orElse(null);
     }
 
     /**

@@ -69,20 +69,21 @@
 | Checksum-driven re-index (not just interval-based staleness) — the connector-driven ingest path (`DefaultSourceIngestionService`) already SHA-256s fetched content: an unchanged source is `UNCHANGED` (not re-embedded), a changed one re-indexed in place under the same document id | ✅ |
 | Per-collection freshness policy — `FreshnessPolicy` (per-collection re-index interval + auto-reingest opt-in, V006 `collection_freshness_policy`) + `FreshnessPolicyStore`; the freshness sweep honours each collection's interval override via a correlated `COALESCE` (global default as fallback); `GET/PUT /api/v1/tenants/{tenantId}/collections/{collectionId}/freshness-policy` | ✅ |
 | GDPR erasure across documents, chunks, and graph — `KnowledgeErasurePort`/`DefaultKnowledgeErasureService` + `DELETE /api/v1/tenants/{tenantId}/collections/{collectionId}`; erases chunks → documents → graph entities (relations cascade), tenant+collection-scoped, idempotent, reports counts | ✅ |
-| Automatic re-ingestion of STALE documents (scheduled re-fetch via source connector for auto-reingest collections) | ⏳ (follow-up — the `autoReingest` policy flag is the hook) |
+| Automatic re-ingestion of STALE documents (scheduled re-fetch via source connector for auto-reingest collections) — `StaleReingestionPort`/`DefaultStaleReingestionService` reads the `autoReingest` scopes (`FreshnessPolicyStore.findAutoReingestScopes`), lists each scope's `STALE` documents (`KnowledgeDocumentStore.findByStatus`) and re-fetches them through their source connector (`SourceIngestionPort`); driven by `StaleReingestionScheduler` (`aether.vault.freshness.reingest-cron`, default 04:30 daily after the freshness sweep), best-effort per document (a failed re-fetch is counted, never stops the sweep), a no-op when no source connector is enabled; metered `aether.vault.reingest.{documents,failures}` | ✅ |
 
 ---
 
-## Phase 4 — Kubernetes + Helm
+## Phase 4 — Kubernetes + Helm 🔄 (core complete)
 
 **Goal:** Production-ready deployment.
 
 | Deliverable | Status |
 |---|---|
 | Multi-stage Dockerfile (Temurin 21 JRE, non-root uid 1000) | ✅ (scaffolded) |
-| Helm chart `vault-infra/helm/aether-vault/` | ⏳ |
-| HPA (min 2, max 8 replicas) | ✅ (manifest) |
-| Docker build + Helm release workflows | ⏳ |
+| Helm chart `vault-infra/helm/aether-vault/` — namespace, service-account (token disabled), configmap (ollama/embedding/freshness/reingest/source/graph config), ClusterIP service (8084), deployment (non-root uid 1000, read-only rootfs, dropped caps, topology spread by zone, startup/liveness/readiness probes, config-checksum rollout), Route (OpenShift), ServiceMonitor, NOTES; secrets never in-chart (pre-existing `existingSecret`) | ✅ |
+| HPA (min 2, max 8 replicas, CPU 70%) | ✅ |
+| Value sets — vanilla / AWS EKS (ALB + IRSA) / OpenShift (Route + SCC) | ✅ |
+| Docker build + Helm release workflows (`helm-release.yml` — lints all value sets + `helm template` dry-run, packages + pushes the chart to GHCR as an OCI artifact on main) | ✅ |
 
 ---
 

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: aether-vault
+description: Aether Vault — Knowledge Platform (document indexing, vector search, RAG, knowledge graph, freshness)
+type: application
+version: 0.1.0
+appVersion: 0.1.0-SNAPSHOT
+keywords:
+  - aether
+  - knowledge
+  - rag
+  - vector-search
+  - knowledge-graph
+  - spring-boot
+maintainers:
+  - name: Suplab
+    email: maintainers@suplab.dev

@@ -79,6 +79,11 @@ class DefaultDocumentIngestionServiceTest {
         }
 
         @Override
+        public List<KnowledgeDocument> findByStatus(KnowledgeScope scope, DocumentStatus status, int limit) {
+            return List.of();
+        }
+
+        @Override
         public long countByCollection(KnowledgeScope scope) {
             return 0;
         }

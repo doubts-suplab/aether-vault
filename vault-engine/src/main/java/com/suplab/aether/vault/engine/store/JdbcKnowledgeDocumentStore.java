@@ -121,6 +121,24 @@ public class JdbcKnowledgeDocumentStore implements KnowledgeDocumentStore {
     }
 
     @Override
+    public List<KnowledgeDocument> findByStatus(KnowledgeScope scope, DocumentStatus status, int limit) {
+        var sql = """
+                SELECT id, tenant_id, collection_id, source_uri, title, content_type, checksum,
+                       status, chunk_count, created_at, indexed_at, updated_at
+                FROM knowledge_documents
+                WHERE tenant_id = :tenantId AND collection_id = :collectionId AND status = :status
+                ORDER BY indexed_at ASC NULLS FIRST
+                LIMIT :limit
+                """;
+        var params = new MapSqlParameterSource()
+                .addValue("tenantId", scope.tenantId())
+                .addValue("collectionId", scope.collectionId())
+                .addValue("status", status.name())
+                .addValue("limit", limit);
+        return jdbc.query(sql, params, this::mapRow);
+    }
+
+    @Override
     public long countByCollection(KnowledgeScope scope) {
         var sql = """
                 SELECT COUNT(*) FROM knowledge_documents

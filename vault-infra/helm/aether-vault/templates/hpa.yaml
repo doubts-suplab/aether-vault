@@ -1,0 +1,22 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aether-vault
+  namespace: {{ include "aether-vault.namespace" . }}
+  labels:
+    {{- include "aether-vault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-engine
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aether-vault
+  minReplicas: {{ .Values.app.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.app.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.app.autoscaling.targetCPUUtilizationPercentage }}

@@ -1,0 +1,22 @@
+{{- if .Values.openshift.enabled -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: aether-vault
+  namespace: {{ include "aether-vault.namespace" . }}
+  labels:
+    {{- include "aether-vault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-engine
+spec:
+  host: {{ .Values.route.host }}
+  to:
+    kind: Service
+    name: aether-vault
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: {{ .Values.route.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.route.insecureEdgeTerminationPolicy }}
+  wildcardPolicy: None
+{{- end }}

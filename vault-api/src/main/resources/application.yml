@@ -57,6 +57,11 @@ aether:
       enabled: ${VAULT_FRESHNESS_ENABLED:true}
       reindex-interval-days: ${VAULT_REINDEX_INTERVAL_DAYS:30}
       cron: ${VAULT_FRESHNESS_CRON:0 0 4 * * *}
+      # Auto-reingestion of STALE documents in collections that opted in (autoReingest). Runs just
+      # after the freshness sweep; a no-op unless a source connector is enabled.
+      reingest-cron: ${VAULT_REINGEST_CRON:0 30 4 * * *}
+      reingest-max-scopes: ${VAULT_REINGEST_MAX_SCOPES:100}
+      reingest-max-per-scope: ${VAULT_REINGEST_MAX_PER_SCOPE:50}
     graph:
       extraction:
         enabled: ${VAULT_GRAPH_EXTRACTION_ENABLED:true}

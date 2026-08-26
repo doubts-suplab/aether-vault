@@ -1,5 +1,6 @@
 package com.suplab.aether.vault.ports;
 
+import com.suplab.aether.vault.domain.DocumentStatus;
 import com.suplab.aether.vault.domain.KnowledgeDocument;
 import com.suplab.aether.vault.domain.KnowledgeScope;
 
@@ -56,6 +57,17 @@ public interface KnowledgeDocumentStore {
      * @return documents in the collection (may be empty)
      */
     List<KnowledgeDocument> findByCollection(KnowledgeScope scope, int limit);
+
+    /**
+     * Lists documents in a collection with a given status, oldest-indexed first. Used by the
+     * auto-reingestion sweep to find the {@code STALE} documents a collection has opted to refresh.
+     *
+     * @param scope  the owning tenant + collection
+     * @param status the lifecycle status to filter by
+     * @param limit  maximum number of documents to return
+     * @return matching documents (may be empty)
+     */
+    List<KnowledgeDocument> findByStatus(KnowledgeScope scope, DocumentStatus status, int limit);
 
     /**
      * Returns the number of documents registered in a collection.

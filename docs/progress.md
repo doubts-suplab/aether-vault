@@ -5,15 +5,56 @@
 
 ---
 
-**Active Phase:** Phase 3 — Freshness & Governance 🔄 core complete (per-collection freshness policy + GDPR collection erasure; checksum-driven re-index already in the ingest path; auto-reingestion follow-up)
+**Active Phase:** Phase 4 — Kubernetes + Helm 🔄 core complete (production Helm chart + release workflow); Phase 3 auto-reingestion now delivered (`StaleReingestionPort` + scheduler)
 
 | Phase | Name | Status | Sessions |
 |---|---|---|---|
 | 0 | Scaffold | ✅ Complete | 1 |
 | 1 | Ingestion & Retrieval Engine | ✅ Complete | 2 |
 | 2 | Knowledge Graph Extraction | 🔄 Core complete (extraction on ingest) | 3 |
-| 3 | Freshness & Governance | 🔄 Core complete (per-collection freshness policy + GDPR erasure; auto-reingest pending) | 4 |
-| 4 | Kubernetes + Helm | ⏳ Planned | — |
+| 3 | Freshness & Governance | ✅ Core complete (per-collection freshness policy + GDPR erasure + auto-reingestion) | 4, 5 |
+| 4 | Kubernetes + Helm | 🔄 Core complete (Helm chart + release workflow) | 5 |
+
+---
+
+## Phase 4 — Kubernetes + Helm + Phase 3 auto-reingestion 🔄 (session 5)
+
+**Commit:** `feat(vault): auto-reingestion of stale documents + production Helm chart`
+
+Closes the last Phase 3 follow-up and stands up production deployment.
+
+### Auto re-ingestion of stale documents (Phase 3 follow-up — done)
+- `StaleReingestionPort` (domain) with a bounded `ReingestionResult(scopesScanned, documentsReingested,
+  documentsFailed)` record; `DefaultStaleReingestionService` (engine) reads the auto-reingest scopes via
+  `FreshnessPolicyStore.findAutoReingestScopes`, lists each scope's `STALE` documents via a new
+  `KnowledgeDocumentStore.findByStatus(scope, status, limit)` (explicit column list, `ORDER BY indexed_at
+  ASC NULLS FIRST`, tenant+collection-scoped), and re-fetches each through its source connector
+  (`SourceIngestionPort.ingestFromSource`). Best-effort per document — a failing re-fetch is counted and
+  the sweep continues.
+- `StaleReingestionScheduler` (vault-api) runs it on `aether.vault.freshness.reingest-cron` (default
+  04:30 daily, just after the freshness sweep). The port is injected via `ObjectProvider`, so with no
+  source connector enabled the scheduler is a no-op — Vault still runs standalone. Metered
+  `aether.vault.reingest.documents` + `aether.vault.reingest.failures` counters.
+- Bounds `aether.vault.freshness.reingest-max-scopes` (default 100) + `-reingest-max-per-scope`
+  (default 50) cap the work per sweep.
+
+### Phase 4 — Kubernetes + Helm (core complete)
+- Production Helm chart at `vault-infra/helm/aether-vault/` mirroring the ecosystem's hardened charts
+  (Core/Flow): namespace, service-account (`automountServiceAccountToken: false`), configmap
+  (ollama/embedding/freshness/reingest/source/graph config), ClusterIP service (8084), deployment
+  (non-root uid 1000, read-only rootfs, dropped caps, topology spread by zone, startup/liveness/readiness
+  probes on `/actuator/health/*`, secret + configmap env, `checksum/config` rollout annotation), HPA
+  (min 2 / max 8 / CPU 70%), ingress, OpenShift Route, ServiceMonitor, NOTES.
+- Value sets: vanilla / AWS EKS (ALB + IRSA) / OpenShift (Route + SCC). Secrets never in-chart — read
+  from a pre-existing `existingSecret` (`postgres-url`, `postgres-user`, `postgres-password`).
+- `helm-release.yml` — lints all three value sets + `helm template` dry-run, then packages and pushes
+  the chart to GHCR as an OCI artifact on main (SHA-pinned actions).
+
+### Constraints upheld
+- `findByStatus` is scoped by `tenant_id` + `collection_id` — no cross-collection read path.
+- Auto-reingestion re-fetches through the existing idempotent ingest path (a document's chunks are
+  replaced, never accumulated); it never deletes.
+- Vault still runs standalone: no source connector → scheduler no-op; chart secrets externalised.
 
 ---
 
