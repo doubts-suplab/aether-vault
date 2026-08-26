@@ -1,0 +1,22 @@
+{{- if .Values.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aether-vault
+  namespace: {{ .Values.serviceMonitor.namespace }}
+  labels:
+    {{- include "aether-vault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-engine
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "aether-vault.namespace" . }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aether-vault
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}

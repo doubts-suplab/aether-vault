@@ -49,6 +49,7 @@ class DefaultSourceIngestionServiceTest {
         @Override public List<KnowledgeDocument> findByCollection(KnowledgeScope s, int limit) { return List.of(); }
         @Override public long countByCollection(KnowledgeScope s) { return 0; }
         @Override public void delete(KnowledgeScope s, UUID id) { }
+        @Override public java.util.List<com.suplab.aether.vault.domain.KnowledgeDocument> findByStatus(KnowledgeScope s, com.suplab.aether.vault.domain.DocumentStatus st, int l) { return java.util.List.of(); }
         @Override public int deleteByCollection(KnowledgeScope s) { return 0; }
     }
 

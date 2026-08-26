@@ -76,7 +76,8 @@ EntityType       = PERSON | ORGANISATION | LOCATION | CONCEPT | PRODUCT | EVENT 
 | `TokenCounter` | `JtokkitTokenCounter` (default), `HeuristicTokenCounter` | Count chunk tokens for context budgeting; tokenizer is replaceable |
 | `RagPipelinePort` | `DefaultRagPipelineService` | Embed query → vector search → bounded context; `retrieveWithGraph` adds a bounded knowledge-graph projection (entity-aware RAG, best-effort) |
 | `KnowledgeFreshnessPort` | `DocumentFreshnessService` | Set-based re-index staleness sweep; applies each collection's interval override (`COALESCE` with the global default) |
-| `FreshnessPolicyStore` | `JdbcFreshnessPolicyStore` | Per-collection freshness override — re-index interval + auto-reingest opt-in (upsert by tenant + collection) |
+| `FreshnessPolicyStore` | `JdbcFreshnessPolicyStore` | Per-collection freshness override — re-index interval + auto-reingest opt-in (upsert by tenant + collection); `findAutoReingestScopes` lists opted-in scopes |
+| `StaleReingestionPort` | `DefaultStaleReingestionService` | Auto-reingestion of `STALE` documents in `autoReingest` collections — re-fetches each through its source connector; best-effort per document, no-op when no connector is enabled |
 | `KnowledgeErasurePort` | `DefaultKnowledgeErasureService` | Right-to-erasure (GDPR Art. 17) — erases a collection's chunks, documents, and graph entities (relations cascade); idempotent, reports counts |
 
 Connector selection goes through `SourceConnectorRegistry` — **default-deny**: a URI no registered
@@ -139,7 +140,12 @@ The knowledge graph is persisted as relational adjacency tables rather than a na
 2. Single `UPDATE`: `INDEXED` documents with `indexed_at < NOW() - interval` become `STALE`, where `interval` is the collection's `collection_freshness_policy` override when present (correlated `COALESCE`), else the global default. `GET/PUT .../freshness-policy` manages the override.
 3. Micrometer: `aether.vault.freshness.stale` counter, `aether.vault.documents.indexed` gauge.
 
-### 5.5 Right to erasure (GDPR Art. 17)
+### 5.5 Auto-reingestion (scheduled STALE re-fetch)
+1. Scheduler (`@Scheduled`, default 04:30 — just after the freshness sweep) → `StaleReingestionPort.reingestStale`.
+2. `FreshnessPolicyStore.findAutoReingestScopes` yields the collections that opted in (`auto_reingest = TRUE`). For each, `KnowledgeDocumentStore.findByStatus(scope, STALE, limit)` lists its stale documents, and each is re-fetched through its source connector (`SourceIngestionPort.ingestFromSource`) — which checksums the content and re-indexes in place only when it changed.
+3. Best-effort per document: a failed re-fetch is counted and the sweep continues. The port is injected via `ObjectProvider`, so with no source connector enabled the scheduler is a no-op (Vault runs standalone). Bounded by `reingest-max-scopes` / `reingest-max-per-scope`. Micrometer: `aether.vault.reingest.documents` + `aether.vault.reingest.failures` counters.
+
+### 5.6 Right to erasure (GDPR Art. 17)
 1. `DELETE /api/v1/tenants/{tenantId}/collections/{collectionId}` → `KnowledgeErasurePort.eraseCollection`.
 2. Deletes the collection's chunks, then document records, then knowledge-graph entities (relations cascade with their entities), and returns the counts removed. Tenant + collection-scoped, idempotent (an empty collection → zero counts). This is Vault's only bulk-delete path; the freshness sweep still only *marks*.
 
@@ -162,3 +168,9 @@ Reads from environment variables (never hardcoded). Defaults target local Docker
 ## 8. Standalone Guarantee
 
 Aether Vault has no compile-time or runtime dependency on Core, Grid, or Memory. It boots, migrates, serves, and runs its freshness sweep entirely on its own PostgreSQL schema (`aether_vault`).
+
+---
+
+## 9. Deployment (Kubernetes / Helm)
+
+The production Helm chart at `vault-infra/helm/aether-vault/` mirrors the Core and Flow charts: a namespace, a service-account with `automountServiceAccountToken: false`, a configmap (ollama/embedding/freshness/reingest/source/graph config), a ClusterIP service on 8084, and a hardened deployment — non-root uid 1000, read-only root filesystem, all capabilities dropped, topology spread by zone, startup/liveness/readiness probes on `/actuator/health/*`, and a `checksum/config` annotation that rolls pods when the configmap changes. An HPA scales 2→8 on 70% CPU; ingress, an OpenShift Route, and a Prometheus ServiceMonitor are opt-in. Three value sets cover vanilla Kubernetes, AWS EKS (ALB ingress + IRSA), and OpenShift (Route + SCC-compatible security context). Database credentials are never in-chart — the deployment reads them from a pre-existing `existingSecret`. The `helm-release.yml` workflow lints all value sets, dry-runs `helm template`, and publishes the packaged chart to GHCR as an OCI artifact on `main`.

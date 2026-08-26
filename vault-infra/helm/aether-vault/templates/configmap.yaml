@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aether-vault-config
+  namespace: {{ include "aether-vault.namespace" . }}
+  labels:
+    {{- include "aether-vault.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-engine
+data:
+  ollama-base-url: {{ .Values.app.config.ollamaBaseUrl | quote }}
+  embedding-enabled: {{ .Values.app.config.embeddingEnabled | quote }}
+  embedding-model: {{ .Values.app.config.embeddingModel | quote }}
+  tokenizer: {{ .Values.app.config.tokenizer | quote }}
+  freshness-enabled: {{ .Values.app.config.freshnessEnabled | quote }}
+  freshness-cron: {{ .Values.app.config.freshnessCron | quote }}
+  reindex-interval-days: {{ .Values.app.config.reindexIntervalDays | quote }}
+  reingest-cron: {{ .Values.app.config.reingestCron | quote }}
+  source-enabled: {{ .Values.app.config.sourceEnabled | quote }}
+  graph-extraction-enabled: {{ .Values.app.config.graphExtractionEnabled | quote }}
+  graph-extractor: {{ .Values.app.config.graphExtractor | quote }}
+  spring-profiles-active: {{ .Values.app.config.springProfilesActive | quote }}

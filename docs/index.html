@@ -103,7 +103,8 @@
   <p class="hero-sub">Organisational knowledge — document indexing, semantic vector search, a Retrieval-Augmented Generation pipeline, and a knowledge graph, scoped per tenant and collection.</p>
   <div class="badges">
     <span class="badge green">Phase 1 — Ingestion &amp; Retrieval Engine ✅</span>
-    <span class="badge accent">Phase 3 — Freshness &amp; Governance (core)</span>
+    <span class="badge green">Phase 3 — Freshness &amp; Governance ✅</span>
+    <span class="badge accent">Phase 4 — Kubernetes + Helm (core)</span>
     <span class="badge">Java 21</span>
     <span class="badge">Spring Boot 3.3</span>
     <span class="badge">pgvector</span>
@@ -151,7 +152,7 @@
     <div class="cap-card">
       <div class="type">Freshness &amp; Governance</div>
       <h3>Re-index Sweep &amp; Erasure</h3>
-      <p>A scheduled sweep flags indexed documents past their (per-collection) re-index interval as stale — marks, never deletes. A collection's derived knowledge — documents, chunks, and graph — can be erased on a right-to-erasure request.</p>
+      <p>A scheduled sweep flags indexed documents past their (per-collection) re-index interval as stale — marks, never deletes. Collections that opt in are then auto-refreshed by a second sweep that re-fetches stale documents through their source connector. A collection's derived knowledge — documents, chunks, and graph — can be erased on a right-to-erasure request.</p>
     </div>
   </div>
 </section>
@@ -196,7 +197,7 @@
     </div>
     <div class="module">
       <div><div class="module-name">vault-infra</div></div>
-      <div><h3>Infrastructure</h3><p>Docker Compose, Kubernetes manifests, standalone migration copies. No Java sources.</p></div>
+      <div><h3>Infrastructure</h3><p>Docker Compose, production Helm chart (hardened deployment + HPA + release workflow), standalone migration copies. No Java sources.</p></div>
     </div>
   </div>
 </section>
@@ -233,8 +234,8 @@
     <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P0</span><span class="phase-name">Scaffold</span><span class="status-badge done">Complete</span></div>
     <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P1</span><span class="phase-name">Ingestion &amp; Retrieval Engine</span><span class="status-badge done">Complete</span></div>
     <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P2</span><span class="phase-name">Knowledge Graph Extraction — automatic entity + co-occurrence relation extraction on ingest</span><span class="status-badge done">Core Complete</span></div>
-    <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P3</span><span class="phase-name">Freshness &amp; Governance — per-collection freshness policy (interval override + auto-reingest opt-in) and GDPR collection erasure (documents + chunks + graph); checksum-driven re-index already in the connector ingest path; auto-reingestion follow-up</span><span class="status-badge done">Core Complete</span></div>
-    <div class="roadmap-item"><span class="dot planned"></span><span class="phase-label">P4</span><span class="phase-name">Kubernetes + Helm</span><span class="status-badge planned">Planned</span></div>
+    <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P3</span><span class="phase-name">Freshness &amp; Governance — per-collection freshness policy (interval override + auto-reingest opt-in), scheduled auto-reingestion of stale documents via source connectors, and GDPR collection erasure (documents + chunks + graph); checksum-driven re-index already in the connector ingest path</span><span class="status-badge done">Core Complete</span></div>
+    <div class="roadmap-item"><span class="dot done"></span><span class="phase-label">P4</span><span class="phase-name">Kubernetes + Helm — production Helm chart (hardened deployment, HPA, ingress/Route, ServiceMonitor; vanilla / EKS / OpenShift value sets) and a Helm lint + OCI release workflow</span><span class="status-badge done">Core Complete</span></div>
   </div>
 </section>
 

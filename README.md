@@ -79,9 +79,15 @@ Indexed knowledge ages. A scheduled sweep (default 04:00 daily) flags every `IND
 
 The re-index interval is **per-collection**: `PUT …/freshness-policy` with `{"reindexIntervalDays": 7, "autoReingest": true}` overrides the global default for one collection (a fast-moving handbook weekly, a stable archive yearly). The sweep applies each collection's override, falling back to the global default when none is set.
 
+Collections that opt in with `autoReingest: true` are **auto-refreshed**: a second scheduled sweep (default 04:30 daily, just after the staleness sweep) lists each opted-in collection's `STALE` documents and re-fetches them through their source connector, re-indexing changed content in place. It is best-effort per document (a failed re-fetch is counted, never stops the sweep) and a no-op when no source connector is enabled — Vault still runs standalone. Tune with `VAULT_REINGEST_CRON`, `VAULT_REINGEST_MAX_SCOPES`, `VAULT_REINGEST_MAX_PER_SCOPE`; observe via the `aether.vault.reingest.{documents,failures}` counters.
+
 ### Governance — right to erasure (GDPR Art. 17)
 
 A whole collection's derived knowledge can be erased on request: `DELETE …/collections/{collectionId}` removes the collection's documents, embedded chunks, and knowledge-graph entities (relations cascade) in one governed, tenant-scoped, idempotent operation, returning the counts removed. This is Vault's only bulk-delete path — freshness only marks.
+
+### Deployment (Kubernetes / Helm)
+
+A production Helm chart lives at `vault-infra/helm/aether-vault/` (mirroring the Core and Flow charts): namespace, service-account (token disabled), configmap, ClusterIP service (8084), a hardened deployment (non-root uid 1000, read-only rootfs, dropped capabilities, topology spread by zone, startup/liveness/readiness probes, config-checksum rollout), HPA (min 2 / max 8 / CPU 70%), ingress, OpenShift Route, and a ServiceMonitor. Value sets ship for vanilla Kubernetes, AWS EKS (ALB + IRSA), and OpenShift (Route + SCC). Secrets are never in-chart — the pods read them from a pre-existing `existingSecret` (`postgres-url`, `postgres-user`, `postgres-password`). The `helm-release.yml` workflow lints every value set, dry-runs `helm template`, and packages + pushes the chart to GHCR as an OCI artifact on `main`.
 
 ## Ecosystem
 
@@ -125,4 +131,7 @@ Aether Vault owns the **Knowledge** capability exclusively. Personal memory stay
 | `VAULT_FRESHNESS_ENABLED` | `true` | Toggle the scheduled freshness sweep |
 | `VAULT_REINDEX_INTERVAL_DAYS` | `30` | Global fallback age beyond which an indexed document is flagged stale (a per-collection `freshness-policy` override wins when set) |
 | `VAULT_FRESHNESS_CRON` | `0 0 4 * * *` | Freshness sweep schedule |
+| `VAULT_REINGEST_CRON` | `0 30 4 * * *` | Auto-reingestion sweep schedule (STALE re-fetch for `autoReingest` collections) |
+| `VAULT_REINGEST_MAX_SCOPES` | `100` | Max auto-reingest collections processed per sweep |
+| `VAULT_REINGEST_MAX_PER_SCOPE` | `50` | Max STALE documents re-ingested per collection per sweep |
 | `SERVER_PORT` | `8084` | HTTP port |
